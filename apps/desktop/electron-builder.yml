@@ -6,6 +6,8 @@ directories:
   buildResources: build
 files:
   - out/**/*
+  # Tray and window icons, loaded at runtime by the main process.
+  - resources/**/*
   - package.json
   - '!**/*.map'
 asarUnpack:

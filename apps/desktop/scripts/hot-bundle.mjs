@@ -31,13 +31,19 @@ function versionOf(name) {
 
 // --- shell hash ------------------------------------------------------------
 const hash = createHash('sha256')
-for (const dir of ['main', 'preload']) {
-  for (const file of listFiles(join(out, dir))) {
-    hash.update(relative(out, file).split(sep).join('/'))
-    hash.update('\0')
-    hash.update(readFileSync(file))
-    hash.update('\0')
-  }
+// Everything in app.asar except the renderer: the compiled main process and
+// preload, plus the runtime resources (tray/window icons) they load.
+const shellFiles = [
+  ...['main', 'preload']
+    .flatMap((dir) => listFiles(join(out, dir)))
+    .map((f) => [relative(out, f), f]),
+  ...listFiles(join(root, 'resources')).map((f) => [relative(root, f), f]),
+]
+for (const [name, file] of shellFiles) {
+  hash.update(name.split(sep).join('/'))
+  hash.update('\0')
+  hash.update(readFileSync(file))
+  hash.update('\0')
 }
 hash.update(`electron@${versionOf('electron')}\0`)
 for (const dep of Object.keys(pkg.dependencies ?? {}).sort()) {
