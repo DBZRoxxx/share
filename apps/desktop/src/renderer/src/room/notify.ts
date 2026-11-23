@@ -1,5 +1,6 @@
 import { toast } from 'sonner'
 import appIcon from '@/assets/app-icon.png'
+import { avatarImage } from '@/lib/avatar-image'
 import { playSound } from '@/lib/sounds'
 import { usePrefs } from '@/stores/prefs'
 import { useChat } from './chat-store'
@@ -29,7 +30,13 @@ function openChatAt(messageId: string) {
   setTimeout(() => useChat.getState().setHighlight(messageId), 150)
 }
 
-function nativeNotification(title: string, body: string, tag: string, onClick: () => void) {
+function nativeNotification(
+  title: string,
+  body: string,
+  tag: string,
+  onClick: () => void,
+  icon: string = appIcon,
+) {
   window.__notified?.push({ title, body, native: true })
   try {
     // Silent: the app plays its own sound (and respects its volume).
@@ -37,7 +44,7 @@ function nativeNotification(title: string, body: string, tag: string, onClick: (
       body: body.slice(0, 200),
       tag,
       silent: true,
-      icon: appIcon,
+      icon,
     })
     n.onclick = onClick
   } catch {
@@ -72,7 +79,11 @@ export function deliverChatNotice(notice: ChatNotice) {
  * notification when the app is in the background. Returns false when the
  * user turned these off (the caller skips its toast too).
  */
-export function notifyPresence(name: string, joined: boolean): boolean {
+export function notifyPresence(
+  person: { identity: string; name: string },
+  joined: boolean,
+): boolean {
+  const { name } = person
   const { joinLeave, desktop } = usePrefs.getState().notifications
   if (!joinLeave) return false
   playSound(joined ? 'join' : 'leave')
@@ -82,6 +93,8 @@ export function notifyPresence(name: string, joined: boolean): boolean {
       joined ? 'Clique para abrir o Share.' : '',
       'share-presence',
       () => void window.share.app.show(),
+      // The person's initial on their color, as in the room.
+      avatarImage(person.identity, name),
     )
   }
   return true

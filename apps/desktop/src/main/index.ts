@@ -16,7 +16,12 @@ import {
   getUpdateStatus,
   setupAutoUpdates,
 } from './updater'
-import { APP_ID, applyWindowIdentity, registerToastIdentity } from './windows-identity'
+import {
+  adoptShortcuts,
+  APP_ID,
+  applyWindowIdentity,
+  registerToastIdentity,
+} from './windows-identity'
 
 // ---------------------------------------------------------------------------
 // Dev helpers: `--multi-instance --profile=2` runs a second, isolated client on
@@ -282,6 +287,7 @@ function registerIpc() {
 
 function onReady() {
   app.setAppUserModelId(APP_ID)
+  adoptShortcuts()
   void registerToastIdentity(icon)
   configureSession()
   registerIpc()

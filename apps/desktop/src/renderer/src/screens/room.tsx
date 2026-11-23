@@ -436,7 +436,7 @@ function useRoomToasts(room: Room) {
       if (since && Date.now() - since < UPDATE_REJOIN_WINDOW_MS) {
         returned.set(p.identity, Date.now())
         toast(`${displayName(p)} voltou (app atualizado)`, { id: `updating-${p.identity}` })
-      } else if (notifyPresence(displayName(p), true)) {
+      } else if (notifyPresence({ identity: p.identity, name: displayName(p) }, true)) {
         toast(`${displayName(p)} entrou na sala`)
       }
     }
@@ -446,7 +446,8 @@ function useRoomToasts(room: Room) {
         toast(`${displayName(p)} está atualizando o app…`, { id: `updating-${p.identity}` })
         return
       }
-      if (notifyPresence(displayName(p), false)) toast(`${displayName(p)} saiu da sala`)
+      if (notifyPresence({ identity: p.identity, name: displayName(p) }, false))
+        toast(`${displayName(p)} saiu da sala`)
     }
     const published = (pub: RemoteTrackPublication, p: RemoteParticipant) => {
       if (pub.source !== Track.Source.ScreenShare) return
