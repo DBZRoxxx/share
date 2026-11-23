@@ -20,6 +20,8 @@ export type ScreenShareState =
   | { status: 'starting' }
   | {
       status: 'live'
+      /** What was asked for (used to resume the share after an update). */
+      request: ScreenShareRequest
       sourceName: string
       sourceKind: CaptureSourceKind
       quality: ScreenQuality
@@ -129,6 +131,7 @@ export class ScreenShareController {
 
       this.setState({
         status: 'live',
+        request: req,
         sourceName: req.sourceName,
         sourceKind: req.sourceKind,
         quality: req.quality,

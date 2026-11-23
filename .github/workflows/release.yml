@@ -26,7 +26,8 @@ jobs:
         shell: bash
         run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version -w @share/desktop
 
-      - name: Build and publish installer
+      # electron-builder creates the release as a draft (see electron-builder.yml).
+      - name: Build installer and upload it to a draft release
         run: npm run release -w @share/desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -36,3 +37,14 @@ jobs:
           # AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           # AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           # AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      # The interface bundle lets installed apps whose main process matches this
+      # build update without reinstalling. Publishing only after it is uploaded
+      # means no app ever sees latest.yml without hot.json.
+      - name: Upload interface update and publish the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" apps/desktop/release-hot/* --clobber
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest

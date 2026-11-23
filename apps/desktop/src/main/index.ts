@@ -1,11 +1,15 @@
 import { join } from 'node:path'
 import { PROTOCOL } from '@share/shared'
-import { app, BrowserWindow, ipcMain, nativeTheme, session, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, screen, session, shell } from 'electron'
 import icon from '../../resources/icon.png?asset'
 import { IPC, type AppInfo } from '../shared/ipc'
 import { getAudioSupport, startAppAudio, stopAppAudio } from './app-audio'
 import { installDisplayMediaHandler, listSources, selectSource } from './capture'
-import { installUpdate, setupAutoUpdates } from './updater'
+import { activeRendererEntry, cleanupHotBundles, currentVersion, markActiveBad } from './hot-update'
+import { consumeResume } from './resume'
+import { getSettings, updateSettings } from './settings'
+import { AppTray } from './tray'
+import { applyUpdate, getUpdateStatus, setupAutoUpdates } from './updater'
 
 // ---------------------------------------------------------------------------
 // Dev helpers: `--multi-instance --profile=2` runs a second, isolated client on
@@ -19,6 +23,20 @@ if (profile && /^[\w-]+$/.test(profile)) {
 
 const BG_COLOR = '#0a0b10'
 let mainWindow: BrowserWindow | null = null
+/** True once the app is really quitting (tray menu, update, OS shutdown). */
+let isQuitting = false
+const tray = new AppTray(icon, () => mainWindow, showMainWindow)
+
+function showMainWindow() {
+  const win = mainWindow
+  if (!win) {
+    if (app.isReady()) createWindow()
+    return
+  }
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+}
 let pendingDeepLink: string | null = findDeepLink(process.argv)
 
 function findDeepLink(argv: string[]): string | null {
@@ -31,10 +49,7 @@ function deliverDeepLink(url: string) {
   } else {
     pendingDeepLink = url
   }
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.focus()
-  }
+  showMainWindow()
 }
 
 // ---------------------------------------------------------------------------
@@ -46,10 +61,7 @@ if (!multiInstance && !app.requestSingleInstanceLock()) {
   app.on('second-instance', (_event, argv) => {
     const url = findDeepLink(argv)
     if (url) deliverDeepLink(url)
-    else if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.focus()
-    }
+    else showMainWindow()
   })
 
   // The installer registers the protocol too; registering at runtime keeps it
@@ -95,6 +107,17 @@ function createWindow() {
   mainWindow = win
 
   win.once('ready-to-show', () => win.show())
+
+  // Closing hides to the notification area so a call keeps going.
+  win.on('close', (event) => {
+    if (isQuitting || !getSettings().closeToTray) return
+    event.preventDefault()
+    win.hide()
+    if (!getSettings().trayHintShown) {
+      tray.showHint()
+      updateSettings({ trayHintShown: true })
+    }
+  })
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
     stopAppAudio()
@@ -132,9 +155,48 @@ function createWindow() {
     if (!isAppUrl(url)) event.preventDefault()
   })
 
+  win.webContents.on('did-fail-load', (_e, code, description, url, isMainFrame) => {
+    if (!isMainFrame || code === -3 /* aborted by a newer navigation */) return
+    console.error('[window] load failed', code, description, url)
+    if (rendererWatchdog) revertToBuiltInRenderer()
+  })
+
+  loadRenderer(win, activeRendererEntry())
+}
+
+// ---------------------------------------------------------------------------
+// Renderer loading. An interface update may replace the built-in renderer; if
+// it doesn't come up, fall back to the built-in one and never use it again.
+// ---------------------------------------------------------------------------
+const RENDERER_START_TIMEOUT_MS = 20_000
+let rendererWatchdog: NodeJS.Timeout | null = null
+
+function clearWatchdog() {
+  if (rendererWatchdog) clearTimeout(rendererWatchdog)
+  rendererWatchdog = null
+}
+
+function revertToBuiltInRenderer() {
+  clearWatchdog()
+  markActiveBad()
+  if (mainWindow) loadRenderer(mainWindow, null)
+}
+
+function loadRenderer(win: BrowserWindow, hotEntry: string | null) {
+  clearWatchdog()
+  // The page (and anything it was capturing) goes away; pop-outs belong to it.
+  stopAppAudio()
+  for (const other of BrowserWindow.getAllWindows()) if (other !== win) other.close()
+
   const devUrl = process.env['ELECTRON_RENDERER_URL']
-  if (!app.isPackaged && devUrl) void win.loadURL(devUrl)
-  else void win.loadFile(join(__dirname, '../renderer/index.html'))
+  if (hotEntry) {
+    rendererWatchdog = setTimeout(revertToBuiltInRenderer, RENDERER_START_TIMEOUT_MS)
+    void win.loadFile(hotEntry)
+  } else if (!app.isPackaged && devUrl) {
+    void win.loadURL(devUrl)
+  } else {
+    void win.loadFile(join(__dirname, '../renderer/index.html'))
+  }
 }
 
 const ALLOWED_PERMISSIONS = new Set([
@@ -143,6 +205,7 @@ const ALLOWED_PERMISSIONS = new Set([
   'fullscreen',
   'clipboard-sanitized-write',
   'speaker-selection',
+  'notifications',
 ])
 
 function configureSession() {
@@ -157,7 +220,8 @@ function configureSession() {
 
 function registerIpc() {
   ipcMain.handle(IPC.appInfo, (): AppInfo => ({
-    version: app.getVersion(),
+    version: currentVersion(),
+    shellVersion: app.getVersion(),
     isPackaged: app.isPackaged,
     profile,
   }))
@@ -182,20 +246,49 @@ function registerIpc() {
     pendingDeepLink = null
     return url
   })
-  ipcMain.handle(IPC.updateInstall, () => installUpdate())
+  ipcMain.handle(IPC.showWindow, () => showMainWindow())
+  ipcMain.handle(IPC.setRoom, (_e, roomId: unknown) => {
+    tray.setRoom(typeof roomId === 'string' && roomId ? roomId : null)
+  })
+  ipcMain.handle(IPC.rendererReady, (event) => {
+    if (event.sender === mainWindow?.webContents) clearWatchdog()
+  })
+  ipcMain.handle(IPC.consumeResume, () => consumeResume())
+  ipcMain.handle(IPC.getSettings, () => getSettings())
+  ipcMain.handle(IPC.setSettings, (_e, partial: unknown) =>
+    updateSettings(typeof partial === 'object' && partial ? partial : {}),
+  )
+
+  ipcMain.handle(IPC.updateGetStatus, () => getUpdateStatus())
+  ipcMain.handle(IPC.updateApply, (_e, resume: unknown) => applyUpdate(resume))
 }
 
 function onReady() {
   app.setAppUserModelId('com.dbzroxxx.share')
   configureSession()
   registerIpc()
+  cleanupHotBundles()
   createWindow()
-  setupAutoUpdates(() => mainWindow)
+  tray.create()
+  setupAutoUpdates({
+    getWindow: () => mainWindow,
+    loadRenderer: (entry) => {
+      if (mainWindow) loadRenderer(mainWindow, entry)
+    },
+  })
+  screen.on('display-metrics-changed', () => tray.refreshIcon())
 }
 
+// With the tray the window is only hidden, so this fires only when it was
+// really closed (tray disabled, or quitting).
 app.on('window-all-closed', () => {
   stopAppAudio()
   app.quit()
 })
 
-app.on('before-quit', () => stopAppAudio())
+app.on('before-quit', () => {
+  isQuitting = true
+  stopAppAudio()
+})
+
+app.on('will-quit', () => tray.destroy())

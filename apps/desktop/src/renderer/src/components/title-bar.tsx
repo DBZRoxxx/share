@@ -1,9 +1,10 @@
-import type { UpdateStatus } from '@shared/ipc'
-import { Download, Loader2 } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { Clock, Download, Loader2, RotateCw, Zap } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { applyUpdate, useUpdate } from '@/stores/update'
+import { Button } from './ui/button'
 import { Logo } from './logo'
-import { Tooltip } from './ui/primitives'
+import { Popover, PopoverContent, PopoverTrigger, Tooltip } from './ui/primitives'
 
 /**
  * Custom title bar (the native one is hidden; Windows still draws the
@@ -28,27 +29,95 @@ export function TitleBar({ children, className }: { children?: ReactNode; classN
 }
 
 function UpdatePill() {
-  const [status, setStatus] = useState<UpdateStatus>({ state: 'idle' })
-  useEffect(() => window.share.updater.onStatus(setStatus), [])
+  const status = useUpdate((s) => s.status)
+  const scheduled = useUpdate((s) => s.scheduled)
+  const setScheduled = useUpdate((s) => s.setScheduled)
+  const inRoom = useUpdate((s) => s.inRoom)
+  const [open, setOpen] = useState(false)
 
-  if (status.state === 'downloading' || status.state === 'available') {
+  if (status.state === 'downloading') {
     return (
       <span className="text-muted flex items-center gap-1.5 text-xs">
         <Loader2 className="size-3.5 animate-spin" />
-        Baixando atualização{status.state === 'downloading' ? ` ${status.percent}%` : '…'}
+        Baixando atualização{status.percent !== null ? ` ${status.percent}%` : '…'}
+      </span>
+    )
+  }
+  if (status.state === 'applying') {
+    return (
+      <span className="text-success flex items-center gap-1.5 text-xs">
+        <Loader2 className="size-3.5 animate-spin" />
+        {status.kind === 'hot' ? 'Atualizando…' : 'Reiniciando…'}
       </span>
     )
   }
   if (status.state !== 'ready') return null
-  return (
-    <Tooltip content={`Versão ${status.version} pronta. O app reinicia em segundos.`} side="bottom">
-      <button
-        type="button"
-        onClick={() => void window.share.updater.install()}
-        className="no-drag bg-success/15 text-success hover:bg-success/25 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
+
+  const hot = status.kind === 'hot'
+
+  // Outside a room there is nothing to lose: apply right away.
+  if (!inRoom) {
+    return (
+      <Tooltip
+        content={`Versão ${status.version} pronta. ${hot ? 'Aplica na hora, sem reiniciar.' : 'O app reinicia em segundos.'}`}
+        side="bottom"
       >
-        <Download className="size-3.5" /> Atualizar e reiniciar
-      </button>
-    </Tooltip>
+        <button
+          type="button"
+          onClick={() => void applyUpdate()}
+          className="no-drag bg-success/15 text-success hover:bg-success/25 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
+        >
+          <Download className="size-3.5" /> Atualizar
+        </button>
+      </Tooltip>
+    )
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            'no-drag flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium',
+            scheduled
+              ? 'bg-surface-2 text-muted hover:text-fg'
+              : 'bg-success/15 text-success hover:bg-success/25',
+          )}
+        >
+          {scheduled ? <Clock className="size-3.5" /> : <Download className="size-3.5" />}
+          {scheduled ? 'Atualização agendada' : 'Atualizar'}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-4">
+        <p className="text-sm font-semibold">Versão {status.version} pronta</p>
+        <p className="text-muted mt-1 text-sm">
+          {hot
+            ? 'Atualização rápida: a tela recarrega e você volta para a sala em ~2 segundos, com câmera, microfone e tela como estavam.'
+            : 'O app reinicia para instalar e volta sozinho para a sala em ~10 segundos, com câmera, microfone e tela como estavam.'}
+        </p>
+        <div className="mt-4 flex flex-col gap-2">
+          <Button
+            variant="primary"
+            onClick={() => {
+              setOpen(false)
+              setScheduled(false)
+              void applyUpdate()
+            }}
+          >
+            {hot ? <Zap /> : <RotateCw />} Atualizar agora
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setScheduled(!scheduled)
+              setOpen(false)
+            }}
+          >
+            <Clock /> {scheduled ? 'Cancelar agendamento' : 'Quando eu sair da sala'}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }

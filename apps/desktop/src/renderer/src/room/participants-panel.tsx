@@ -1,15 +1,15 @@
 import { useIsSpeaking, useParticipants } from '@livekit/components-react'
 import { Track, type Participant } from 'livekit-client'
-import { Camera, Link2, Mic, MicOff, MonitorUp, Volume2, VolumeX, X } from 'lucide-react'
+import { Camera, Link2, Mic, MicOff, MonitorUp, Volume2, VolumeX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Slider, Tooltip } from '@/components/ui/primitives'
 import { cn } from '@/lib/utils'
 import { Avatar, displayName } from './media-tile'
 import { micKey, useRoomUi } from './room-ui'
 
+/** People tab of the side panel. */
 export function ParticipantsPanel({ onInvite }: { onInvite: () => void }) {
   const participants = useParticipants()
-  const setPanelOpen = useRoomUi((s) => s.setPanelOpen)
 
   const sorted = [...participants].sort((a, b) => {
     if (a.isLocal !== b.isLocal) return a.isLocal ? -1 : 1
@@ -17,24 +17,8 @@ export function ParticipantsPanel({ onInvite }: { onInvite: () => void }) {
   })
 
   return (
-    <aside
-      aria-label="Pessoas na sala"
-      className="animate-fade-in border-border bg-surface flex w-72 shrink-0 flex-col border-l"
-    >
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <h2 className="text-sm font-semibold">
-          Na sala <span className="text-muted">· {participants.length}</span>
-        </h2>
-        <button
-          type="button"
-          aria-label="Fechar painel"
-          onClick={() => setPanelOpen(false)}
-          className="text-muted hover:bg-surface-2 hover:text-fg rounded-lg p-1"
-        >
-          <X className="size-4" />
-        </button>
-      </div>
-      <ul className="flex-1 overflow-y-auto px-2">
+    <>
+      <ul className="flex-1 overflow-y-auto px-2 pt-1" aria-label="Pessoas na sala">
         {sorted.map((p) => (
           <ParticipantRow key={p.identity} participant={p} />
         ))}
@@ -44,7 +28,7 @@ export function ParticipantsPanel({ onInvite }: { onInvite: () => void }) {
           <Link2 /> Copiar link de convite
         </Button>
       </div>
-    </aside>
+    </>
   )
 }
 

@@ -4,6 +4,7 @@ import {
   CameraOff,
   LayoutGrid,
   Loader2,
+  MessageCircle,
   Mic,
   MicOff,
   MonitorOff,
@@ -22,6 +23,7 @@ import { describeMediaError } from '@/lib/devices'
 import { CAMERA_CAPTURE, cameraPublishOptions, MIC_CAPTURE } from '@/lib/media'
 import { cn } from '@/lib/utils'
 import { usePrefs } from '@/stores/prefs'
+import { useChat } from './chat-store'
 import { useRoomUi } from './room-ui'
 import { useScreenShareState, type ScreenShareController } from './screen-share'
 
@@ -65,6 +67,19 @@ function ControlButton({
         {badge}
       </button>
     </Tooltip>
+  )
+}
+
+function Badge({ children, accent }: { children: ReactNode; accent?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-semibold',
+        accent ? 'bg-accent ring-surface text-white ring-2' : 'bg-fg text-bg',
+      )}
+    >
+      {children}
+    </span>
   )
 }
 
@@ -119,8 +134,9 @@ export function ControlBar({
   const participants = useParticipants()
   const layout = useRoomUi((s) => s.layout)
   const setLayout = useRoomUi((s) => s.setLayout)
-  const panelOpen = useRoomUi((s) => s.panelOpen)
-  const setPanelOpen = useRoomUi((s) => s.setPanelOpen)
+  const panel = useRoomUi((s) => s.panel)
+  const togglePanel = useRoomUi((s) => s.togglePanel)
+  const unread = useChat((s) => s.unread)
   const setPickerOpen = useRoomUi((s) => s.setPickerOpen)
   const setSettingsOpen = useRoomUi((s) => s.setSettingsOpen)
 
@@ -216,14 +232,23 @@ export function ControlBar({
 
       <div className="flex flex-1 items-center justify-end gap-2">
         <ControlButton
-          label="Pessoas na sala"
-          active={panelOpen}
-          onClick={() => setPanelOpen(!panelOpen)}
+          label="Chat"
+          shortcut="Ctrl+Shift+C"
+          active={panel === 'chat'}
+          onClick={() => togglePanel('chat')}
           badge={
-            <span className="bg-fg text-bg absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-semibold">
-              {participants.length}
-            </span>
+            unread > 0 && panel !== 'chat' ? (
+              <Badge accent>{unread > 99 ? '99+' : unread}</Badge>
+            ) : undefined
           }
+        >
+          <MessageCircle />
+        </ControlButton>
+        <ControlButton
+          label="Pessoas na sala"
+          active={panel === 'people'}
+          onClick={() => togglePanel('people')}
+          badge={<Badge>{participants.length}</Badge>}
         >
           <Users />
         </ControlButton>

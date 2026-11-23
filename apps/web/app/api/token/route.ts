@@ -1,5 +1,6 @@
 import { tokenRequestSchema, type ErrorResponse, type TokenResponse } from '@share/shared'
 import { AccessToken } from 'livekit-server-sdk'
+import { corsHeaders, jsonResponse, rateLimited } from '@/lib/http'
 import { createRateLimiter } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
@@ -8,25 +9,11 @@ export const dynamic = 'force-dynamic'
 const TOKEN_TTL = '6h'
 const rateLimit = createRateLimiter({ limit: 30, windowMs: 60_000 })
 
-// The desktop app loads from file:// (Origin: null), so CORS must be open.
-// That is fine: the token only grants access to the room the caller already
-// knows the unguessable id of, and no cookies/credentials are involved.
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Max-Age': '86400',
-}
-
-function json<T>(body: T, status = 200, headers: Record<string, string> = {}) {
-  return Response.json(body, {
-    status,
-    headers: { ...CORS_HEADERS, 'Cache-Control': 'no-store', ...headers },
-  })
-}
+const CORS = corsHeaders('POST')
+const json = <T>(body: T, status = 200) => jsonResponse(body, { status, cors: CORS })
 
 export function OPTIONS() {
-  return new Response(null, { status: 204, headers: CORS_HEADERS })
+  return new Response(null, { status: 204, headers: CORS })
 }
 
 export async function POST(request: Request) {
@@ -36,13 +23,8 @@ export async function POST(request: Request) {
     return json<ErrorResponse>({ error: 'Servidor não configurado' }, 500)
   }
 
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
-  const limited = rateLimit(ip)
-  if (!limited.ok) {
-    return json<ErrorResponse>({ error: 'Muitas tentativas, aguarde um pouco' }, 429, {
-      'Retry-After': String(limited.retryAfterS),
-    })
-  }
+  const limited = rateLimited(request, rateLimit, CORS)
+  if (limited) return limited
 
   let body: unknown
   try {

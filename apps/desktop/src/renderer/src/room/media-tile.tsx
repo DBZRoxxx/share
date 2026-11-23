@@ -39,11 +39,38 @@ export function Avatar({
   speaking,
 }: {
   participant: Participant
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
   speaking?: boolean
 }) {
-  const hue = hueFor(participant.identity)
-  const sizes = { sm: 'size-8 text-xs', md: 'size-16 text-xl', lg: 'size-24 text-3xl' }
+  return (
+    <NameAvatar
+      seed={participant.identity}
+      name={displayName(participant)}
+      size={size}
+      speaking={speaking}
+    />
+  )
+}
+
+/** Avatar from a name alone (e.g. chat authors who already left the room). */
+export function NameAvatar({
+  seed,
+  name,
+  size = 'md',
+  speaking,
+}: {
+  seed: string
+  name: string
+  size?: 'xs' | 'sm' | 'md' | 'lg'
+  speaking?: boolean
+}) {
+  const hue = hueFor(seed)
+  const sizes = {
+    xs: 'size-7 text-[11px]',
+    sm: 'size-8 text-xs',
+    md: 'size-16 text-xl',
+    lg: 'size-24 text-3xl',
+  }
   return (
     <span
       className={cn(
@@ -56,7 +83,7 @@ export function Avatar({
       }}
       aria-hidden="true"
     >
-      {initials(displayName(participant))}
+      {initials(name)}
     </span>
   )
 }

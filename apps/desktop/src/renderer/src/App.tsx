@@ -7,6 +7,7 @@ import { PreJoinScreen } from '@/screens/prejoin'
 import { RoomScreen } from '@/screens/room'
 import { useNav } from '@/stores/nav'
 import { usePrefs } from '@/stores/prefs'
+import { initUpdates, runScheduledUpdate } from '@/stores/update'
 
 function useDeepLinks() {
   useEffect(() => {
@@ -29,8 +30,36 @@ function useDeepLinks() {
       goPrejoin(roomId)
     }
 
-    void window.share.deepLink.consumePending().then((url) => url && open(url))
+    void (async () => {
+      // Coming back from an update: straight back into the room.
+      const resume = await window.share.app.consumeResume()
+      if (resume && usePrefs.getState().name.trim()) {
+        useNav.getState().enterRoom(resume.roomId, resume)
+      }
+      const url = await window.share.deepLink.consumePending()
+      if (url) open(url)
+    })()
     return window.share.deepLink.onOpen(open)
+  }, [])
+}
+
+/** Updates, tray integration and the "interface started" signal for the main process. */
+function useShell() {
+  useEffect(() => {
+    void window.share.app.rendererReady()
+    const stopUpdates = initUpdates()
+    const stopTray = window.share.app.onLeaveRoomRequest(() => {
+      if (useNav.getState().view.name === 'room') useNav.getState().goHome()
+    })
+    // Leaving a room runs an update the user postponed until then.
+    const stopNav = useNav.subscribe((state, prev) => {
+      if (prev.view.name === 'room' && state.view.name !== 'room') runScheduledUpdate()
+    })
+    return () => {
+      stopUpdates()
+      stopTray()
+      stopNav()
+    }
   }, [])
 }
 
@@ -38,11 +67,12 @@ export function App() {
   const view = useNav((s) => s.view)
   const hasName = usePrefs((s) => !!s.name.trim())
   useDeepLinks()
+  useShell()
 
   return (
     <TooltipProvider delayDuration={400}>
       {view.name === 'room' && hasName ? (
-        <RoomScreen key={view.roomId} roomId={view.roomId} />
+        <RoomScreen key={view.roomId} roomId={view.roomId} resume={view.resume} />
       ) : view.name === 'prejoin' || view.name === 'room' ? (
         <PreJoinScreen key={view.roomId} roomId={view.roomId} />
       ) : (

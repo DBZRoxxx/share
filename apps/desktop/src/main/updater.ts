@@ -1,35 +1,130 @@
 import { app, type BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { IPC, type UpdateStatus } from '../shared/ipc'
+import { compareVersions } from './hot-logic'
+import { activateHotUpdate, checkHotUpdate, getShell, type StagedHotUpdate } from './hot-update'
+import { saveResume } from './resume'
 
-const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
+const CHECK_INTERVAL_MS = 2 * 60 * 60 * 1000
 
-/** Downloads updates from GitHub Releases in the background; the UI offers "restart". */
-export function setupAutoUpdates(getWindow: () => BrowserWindow | null): void {
-  if (!app.isPackaged) return
+/**
+ * Two kinds of updates:
+ * - interface only (hot): downloaded as a renderer archive and applied by
+ *   reloading the window, see hot-update.ts;
+ * - full: the regular installer via electron-updater, applied by restarting.
+ *
+ * Nothing is applied without the user clicking "Atualizar" (or quitting): the
+ * renderer saves where the user was so it can put them back in the room.
+ */
 
-  const send = (status: UpdateStatus) => getWindow()?.webContents.send(IPC.updateStatus, status)
+let status: UpdateStatus = { state: 'idle' }
+let staged: StagedHotUpdate | null = null
+let fullVersion: string | null = null
+let silentFull = false
+let checking = false
+let getWindow: () => BrowserWindow | null = () => null
+let loadRenderer: (entry: string | null) => void = () => undefined
 
-  autoUpdater.autoDownload = true
-  autoUpdater.autoInstallOnAppQuit = true
-
-  autoUpdater.on('update-available', (info) => send({ state: 'available', version: info.version }))
-  autoUpdater.on('download-progress', (p) =>
-    send({ state: 'downloading', percent: Math.round(p.percent) }),
-  )
-  autoUpdater.on('update-downloaded', (info) => send({ state: 'ready', version: info.version }))
-  autoUpdater.on('error', (error) => {
-    console.error('[updater]', error)
-    send({ state: 'error', message: error.message })
-  })
-
-  const check = () =>
-    autoUpdater.checkForUpdates().catch((e) => console.error('[updater] check failed', e))
-  setTimeout(check, 10_000)
-  setInterval(check, CHECK_INTERVAL_MS)
+function setStatus(next: UpdateStatus) {
+  status = next
+  getWindow()?.webContents.send(IPC.updateStatus, next)
 }
 
-export function installUpdate(): void {
-  // isSilent: run the installer without UI; isForceRunAfter: relaunch afterwards.
-  autoUpdater.quitAndInstall(true, true)
+export function getUpdateStatus(): UpdateStatus {
+  return status
+}
+
+/** The update the user would get by clicking "Atualizar", full taking precedence. */
+function readyStatus(): UpdateStatus {
+  if (fullVersion) return { state: 'ready', kind: 'full', version: fullVersion }
+  if (staged) return { state: 'ready', kind: 'hot', version: staged.version }
+  return { state: 'idle' }
+}
+
+async function checkHot() {
+  try {
+    const found = await checkHotUpdate((version, percent) => {
+      if (!fullVersion) setStatus({ state: 'downloading', kind: 'hot', version, percent })
+    })
+    if (found) staged = found
+  } catch (error) {
+    console.error('[updater] interface update failed', error)
+  }
+  setStatus(readyStatus())
+}
+
+async function checkFull() {
+  const result = await autoUpdater.checkForUpdates()
+  if (!result?.isUpdateAvailable) return
+  const version = result.updateInfo.version
+  if (fullVersion === version) return
+  // An interface update already brings the user to this version; download the
+  // installer quietly so the app itself catches up the next time it quits.
+  silentFull = !!staged && compareVersions(staged.version, version) >= 0
+  if (!silentFull) setStatus({ state: 'downloading', kind: 'full', version, percent: null })
+  await autoUpdater.downloadUpdate()
+  if (!silentFull) {
+    fullVersion = version
+    setStatus(readyStatus())
+  }
+}
+
+async function check() {
+  if (checking || status.state === 'applying') return
+  checking = true
+  try {
+    await checkHot()
+    await checkFull()
+  } catch (error) {
+    console.error('[updater] check failed', error)
+    if (status.state === 'downloading') setStatus(readyStatus())
+  } finally {
+    checking = false
+  }
+}
+
+export function setupAutoUpdates(opts: {
+  getWindow: () => BrowserWindow | null
+  loadRenderer: (entry: string | null) => void
+}): void {
+  getWindow = opts.getWindow
+  loadRenderer = opts.loadRenderer
+  // Packaged builds only, unless pointed at a local feed for testing.
+  if (!app.isPackaged && !process.env['SHARE_UPDATE_FEED']) return
+
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.on('download-progress', (p) => {
+    if (silentFull || status.state !== 'downloading' || status.kind !== 'full') return
+    setStatus({ ...status, percent: Math.round(p.percent) })
+  })
+  autoUpdater.on('error', (error) => console.error('[updater]', error))
+
+  // A postponed interface update is in place on the next launch.
+  app.on('before-quit', () => {
+    if (staged && !fullVersion) activateHotUpdate(staged)
+  })
+
+  if (getShell() === null) console.warn('[updater] no shell.json: interface updates disabled')
+  setTimeout(() => void check(), 8_000)
+  setInterval(() => void check(), CHECK_INTERVAL_MS)
+}
+
+/** Applies the ready update. `resume` lets the renderer put the user back in the room. */
+export function applyUpdate(resume: unknown): void {
+  if (status.state !== 'ready') return
+  if (resume) saveResume(resume)
+
+  if (status.kind === 'hot' && staged) {
+    setStatus({ state: 'applying', kind: 'hot' })
+    const entry = activateHotUpdate(staged)
+    staged = null
+    status = { state: 'idle' }
+    loadRenderer(entry)
+    return
+  }
+
+  setStatus({ state: 'applying', kind: 'full' })
+  // isSilent: no installer UI; isForceRunAfter: relaunch when done.
+  setImmediate(() => autoUpdater.quitAndInstall(true, true))
 }

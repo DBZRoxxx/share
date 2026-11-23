@@ -2,6 +2,7 @@ import { Check, ChevronDown, X } from 'lucide-react'
 import {
   Dialog as DialogPrimitive,
   DropdownMenu as MenuPrimitive,
+  Popover as PopoverPrimitive,
   Select as SelectPrimitive,
   Slider as SliderPrimitive,
   Switch as SwitchPrimitive,
@@ -196,6 +197,32 @@ export function Slider({ className, ...props }: ComponentProps<typeof SliderPrim
         aria-label="Volume"
       />
     </SliderPrimitive.Root>
+  )
+}
+
+/* -------------------------------- Popover -------------------------------- */
+
+export const Popover = PopoverPrimitive.Root
+export const PopoverTrigger = PopoverPrimitive.Trigger
+export const PopoverClose = PopoverPrimitive.Close
+
+export function PopoverContent({
+  className,
+  sideOffset = 8,
+  ...props
+}: ComponentProps<typeof PopoverPrimitive.Content>) {
+  return (
+    <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Content
+        sideOffset={sideOffset}
+        collisionPadding={12}
+        className={cn(
+          'animate-scale-in border-border bg-surface z-50 rounded-2xl border shadow-2xl shadow-black/50 outline-none',
+          className,
+        )}
+        {...props}
+      />
+    </PopoverPrimitive.Portal>
   )
 }
 

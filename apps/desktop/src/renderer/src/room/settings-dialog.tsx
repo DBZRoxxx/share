@@ -1,6 +1,7 @@
 import { useLocalParticipant, useRoomContext } from '@livekit/components-react'
 import { DISPLAY_NAME_MAX } from '@share/shared'
-import { useState } from 'react'
+import type { MainSettings } from '@shared/ipc'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, Field, Input, Select, Switch } from '@/components/ui/primitives'
@@ -135,7 +136,37 @@ function SettingsBody() {
           onChange={(v) => prefs.set({ showStats: v })}
         />
       </section>
+
+      <AppSection />
     </div>
+  )
+}
+
+/** Settings stored by the main process (they apply even before the window loads). */
+function AppSection() {
+  const [settings, setSettings] = useState<MainSettings | null>(null)
+  const [version, setVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    void window.share.settings.get().then((s) => alive && setSettings(s))
+    void window.share.app.info().then((i) => alive && setVersion(i.version))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  return (
+    <section className="flex flex-col gap-3">
+      <h3 className="text-muted text-xs font-semibold tracking-wide uppercase">App</h3>
+      <ToggleRow
+        label="Ao fechar, continuar rodando na bandeja"
+        hint="Fechar a janela não tira você da sala. Para sair de vez, use o ícone do Share perto do relógio."
+        checked={settings?.closeToTray ?? true}
+        onChange={(v) => void window.share.settings.set({ closeToTray: v }).then(setSettings)}
+      />
+      {version && <p className="text-muted text-xs">Share versão {version}</p>}
+    </section>
   )
 }
 

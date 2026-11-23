@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "dev:2": "electron-vite dev -- --multi-instance --profile=2",
-    "build": "electron-vite build",
+    "build": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\" && electron-vite build && node scripts/hot-bundle.mjs",
     "preview": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
     "icons": "node scripts/generate-icons.mjs",
@@ -21,6 +21,7 @@
     "loopback-capture": "4.0.0"
   },
   "devDependencies": {
+    "@electron/asar": "^4.3.2",
     "@livekit/components-react": "^2.9.26",
     "@share/shared": "*",
     "@tailwindcss/vite": "^4.3.5",
@@ -33,6 +34,7 @@
     "electron": "45.4.1",
     "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
+    "frimousse": "^0.4.0",
     "livekit-client": "^2.25.0",
     "lucide-react": "^1.77.0",
     "radix-ui": "^1.8.1",

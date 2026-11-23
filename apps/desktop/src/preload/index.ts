@@ -17,6 +17,15 @@ const api: ShareApi = {
   app: {
     info: () => ipcRenderer.invoke(IPC.appInfo),
     openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
+    show: () => ipcRenderer.invoke(IPC.showWindow),
+    setRoom: (roomId) => ipcRenderer.invoke(IPC.setRoom, roomId),
+    rendererReady: () => ipcRenderer.invoke(IPC.rendererReady),
+    consumeResume: () => ipcRenderer.invoke(IPC.consumeResume),
+    onLeaveRoomRequest: (callback) => subscribe<void>(IPC.trayLeaveRoom, callback),
+  },
+  settings: {
+    get: () => ipcRenderer.invoke(IPC.getSettings),
+    set: (partial) => ipcRenderer.invoke(IPC.setSettings, partial),
   },
   capture: {
     getSources: () => ipcRenderer.invoke(IPC.getSources),
@@ -30,8 +39,9 @@ const api: ShareApi = {
     onOpen: (callback) => subscribe<string>(IPC.deepLinkOpen, callback),
   },
   updater: {
+    getStatus: () => ipcRenderer.invoke(IPC.updateGetStatus),
     onStatus: (callback) => subscribe<UpdateStatus>(IPC.updateStatus, callback),
-    install: () => ipcRenderer.invoke(IPC.updateInstall),
+    apply: (resume) => ipcRenderer.invoke(IPC.updateApply, resume),
   },
 }
 

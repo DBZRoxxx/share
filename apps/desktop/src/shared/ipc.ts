@@ -37,15 +37,53 @@ export type StartAppAudioResult =
 /** Message posted to the renderer's main world carrying the PCM MessagePort. */
 export const AUDIO_PORT_MESSAGE = 'share:app-audio-port'
 
+/**
+ * - `hot`: only the interface changed; applied by reloading the window (no restart).
+ * - `full`: the app itself changed; applied by restarting into the new installer.
+ */
+export type UpdateKind = 'hot' | 'full'
+
 export type UpdateStatus =
   | { state: 'idle' }
-  | { state: 'available'; version: string }
-  | { state: 'downloading'; percent: number }
-  | { state: 'ready'; version: string }
+  | { state: 'downloading'; kind: UpdateKind; version: string; percent: number | null }
+  | { state: 'ready'; kind: UpdateKind; version: string }
+  | { state: 'applying'; kind: UpdateKind }
   | { state: 'error'; message: string }
 
+/**
+ * What the renderer needs to put the user back where they were after an
+ * update reloads or restarts the app. Opaque to the main process.
+ */
+export interface ResumeState {
+  roomId: string
+  camera: boolean
+  mic: boolean
+  screen: {
+    sourceId: string
+    sourceKind: CaptureSourceKind
+    sourceName: string
+    quality: 'motion' | 'detail'
+    audio: ShareAudioMode
+  } | null
+  layout: 'grid' | 'spotlight'
+  spotlightKey: string | null
+  /** Chat messages (shape of @share/shared ChatMessage). */
+  chat: unknown[]
+}
+
+/** Settings owned by the main process (they apply before the renderer loads). */
+export interface MainSettings {
+  /** Closing the window hides it to the notification area instead of quitting. */
+  closeToTray: boolean
+  /** The one-time "still running" balloon was shown. */
+  trayHintShown: boolean
+}
+
 export interface AppInfo {
+  /** Version the user is running (includes an applied interface update). */
   version: string
+  /** Version of the installed app (main process, preload, Electron). */
+  shellVersion: string
   isPackaged: boolean
   /** Separate dev profile number when running a second instance for testing. */
   profile: string | null
@@ -55,6 +93,20 @@ export interface ShareApi {
   app: {
     info(): Promise<AppInfo>
     openExternal(url: string): Promise<void>
+    /** Brings the main window back (e.g. from the notification area). */
+    show(): Promise<void>
+    /** Tells the main process which room the user is in (tray menu/tooltip). */
+    setRoom(roomId: string | null): Promise<void>
+    /** Called once the interface has mounted; guards against a broken update. */
+    rendererReady(): Promise<void>
+    /** Returns (and clears) the state saved before an update reloaded the app. */
+    consumeResume(): Promise<ResumeState | null>
+    /** "Sair da sala" was clicked in the tray menu. */
+    onLeaveRoomRequest(callback: () => void): () => void
+  }
+  settings: {
+    get(): Promise<MainSettings>
+    set(partial: Partial<MainSettings>): Promise<MainSettings>
   }
   capture: {
     getSources(): Promise<CaptureSource[]>
@@ -71,8 +123,10 @@ export interface ShareApi {
     onOpen(callback: (url: string) => void): () => void
   }
   updater: {
+    getStatus(): Promise<UpdateStatus>
     onStatus(callback: (status: UpdateStatus) => void): () => void
-    install(): Promise<void>
+    /** Applies the ready update; `resume` puts the user back in the room afterwards. */
+    apply(resume: ResumeState | null): Promise<void>
   }
 }
 
@@ -87,6 +141,14 @@ export const IPC = {
   appAudioPort: 'capture:app-audio-port',
   consumeDeepLink: 'deeplink:consume',
   deepLinkOpen: 'deeplink:open',
+  showWindow: 'app:show',
+  setRoom: 'app:set-room',
+  rendererReady: 'app:renderer-ready',
+  consumeResume: 'app:consume-resume',
+  trayLeaveRoom: 'tray:leave-room',
+  getSettings: 'settings:get',
+  setSettings: 'settings:set',
   updateStatus: 'updater:status',
-  updateInstall: 'updater:install',
+  updateGetStatus: 'updater:get-status',
+  updateApply: 'updater:apply',
 } as const

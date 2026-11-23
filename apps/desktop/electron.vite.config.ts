@@ -21,7 +21,10 @@ function devCsp(): PluginOption {
 // native loopback-capture addon) are externalized automatically and shipped in
 // node_modules; everything else — including @share/shared — is bundled.
 export default defineConfig({
-  main: {},
+  main: {
+    // Electron's unpatched fs (for reading/writing .asar files as plain files).
+    build: { rolldownOptions: { external: ['original-fs'] } },
+  },
   preload: {},
   renderer: {
     resolve: {

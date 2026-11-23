@@ -10,6 +10,8 @@ export default tseslint.config(
       '**/dist/**',
       '**/out/**',
       '**/release/**',
+      '**/release-hot/**',
+      '**/.vercel/**',
       '**/.next/**',
       '**/next-env.d.ts',
     ],

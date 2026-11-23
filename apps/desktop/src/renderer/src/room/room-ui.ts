@@ -2,6 +2,7 @@ import { Track, type Participant } from 'livekit-client'
 import { create } from 'zustand'
 
 export type LayoutMode = 'grid' | 'spotlight'
+export type SidePanel = 'chat' | 'people'
 
 /** Stable key for a participant's track slot, e.g. `abc123:screen_share`. */
 export function tileKey(participant: Participant, source: Track.Source): string {
@@ -20,7 +21,8 @@ interface RoomUiState {
   layout: LayoutMode
   /** Tile shown big in spotlight mode (null = first screen share). */
   spotlightKey: string | null
-  panelOpen: boolean
+  /** Side panel tab, or null when closed. */
+  panel: SidePanel | null
   pickerOpen: boolean
   settingsOpen: boolean
   poppedOut: Record<string, true>
@@ -32,7 +34,9 @@ interface RoomUiState {
   reset: () => void
   setLayout: (layout: LayoutMode) => void
   toggleSpotlight: (key: string) => void
-  setPanelOpen: (open: boolean) => void
+  setPanel: (panel: SidePanel | null) => void
+  /** Opens the tab, or closes the panel if that tab is already showing. */
+  togglePanel: (panel: SidePanel) => void
   setPickerOpen: (open: boolean) => void
   setSettingsOpen: (open: boolean) => void
   setPoppedOut: (key: string, popped: boolean) => void
@@ -43,7 +47,7 @@ interface RoomUiState {
 const initial = {
   layout: 'grid' as LayoutMode,
   spotlightKey: null,
-  panelOpen: false,
+  panel: null as SidePanel | null,
   pickerOpen: false,
   settingsOpen: false,
   poppedOut: {},
@@ -61,7 +65,8 @@ export const useRoomUi = create<RoomUiState>()((set) => ({
         ? { layout: 'grid', spotlightKey: null }
         : { layout: 'spotlight', spotlightKey: key },
     ),
-  setPanelOpen: (panelOpen) => set({ panelOpen }),
+  setPanel: (panel) => set({ panel }),
+  togglePanel: (panel) => set((s) => ({ panel: s.panel === panel ? null : panel })),
   setPickerOpen: (pickerOpen) => set({ pickerOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setPoppedOut: (key, popped) =>
