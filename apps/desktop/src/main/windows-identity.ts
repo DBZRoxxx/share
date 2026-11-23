@@ -14,8 +14,17 @@ import { app, shell, type BrowserWindow } from 'electron'
  * machines that ran them. The installed app therefore uses a fresh ID, and
  * development keeps its own.
  */
-export const APP_ID = app.isPackaged ? 'com.dbzroxxx.share.desktop' : 'com.dbzroxxx.share.dev'
-const DISPLAY_NAME = app.isPackaged ? 'Share' : 'Share (dev)'
+/**
+ * The real installed app, as opposed to development (electron.exe) or a
+ * packaged build run side by side for testing (--multi-instance). Only the
+ * real app may register itself with Windows (ID, shortcuts, notification
+ * name, share:// links): otherwise a test build, which may sit in any folder
+ * and be deleted later, would take over the installed app's identity.
+ */
+export const IS_REAL_INSTALL = app.isPackaged && !process.argv.includes('--multi-instance')
+
+export const APP_ID = IS_REAL_INSTALL ? 'com.dbzroxxx.share.desktop' : 'com.dbzroxxx.share.dev'
+const DISPLAY_NAME = IS_REAL_INSTALL ? 'Share' : 'Share (dev)'
 
 const run = promisify(execFile)
 
@@ -26,7 +35,7 @@ const run = promisify(execFile)
  * copied out of app.asar into userData.
  */
 export async function registerToastIdentity(iconInAsar: string): Promise<void> {
-  if (process.platform !== 'win32') return
+  if (process.platform !== 'win32' || !IS_REAL_INSTALL) return
   try {
     // The installed app's folder, not a test profile's: the registry is shared.
     const icon = join(app.getPath('appData'), 'Share', 'notification-icon.png')
@@ -57,9 +66,10 @@ export async function registerToastIdentity(iconInAsar: string): Promise<void> {
 /** Taskbar name, icon and relaunch target for a window, regardless of cached data. */
 export function applyWindowIdentity(win: BrowserWindow): void {
   if (process.platform !== 'win32') return
-  // In development the executable is electron.exe: keep its icon out of it.
+  // In development the executable is electron.exe, and a test build may be
+  // deleted: only the real app gives Windows a relaunch target.
   win.setAppDetails(
-    app.isPackaged
+    IS_REAL_INSTALL
       ? {
           appId: APP_ID,
           appIconPath: process.execPath,
@@ -78,7 +88,7 @@ export function applyWindowIdentity(win: BrowserWindow): void {
  * every start: an update reinstalls the shortcuts with the old ID.
  */
 export function adoptShortcuts(): void {
-  if (process.platform !== 'win32' || !app.isPackaged) return
+  if (process.platform !== 'win32' || !IS_REAL_INSTALL) return
   const appData = app.getPath('appData')
   const candidates = [
     join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Share.lnk'),

@@ -20,6 +20,7 @@ import {
   adoptShortcuts,
   APP_ID,
   applyWindowIdentity,
+  IS_REAL_INSTALL,
   registerToastIdentity,
 } from './windows-identity'
 
@@ -78,7 +79,7 @@ if (!multiInstance && !app.requestSingleInstanceLock()) {
 
   // The installer registers the protocol too; registering at runtime keeps it
   // pointing at the current install. Skipped in dev so it doesn't hijack links.
-  if (app.isPackaged) app.setAsDefaultProtocolClient(PROTOCOL)
+  if (IS_REAL_INSTALL) app.setAsDefaultProtocolClient(PROTOCOL)
 
   app.whenReady().then(onReady)
 }
