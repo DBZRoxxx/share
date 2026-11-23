@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { usePrefs } from '@/stores/prefs'
 import { useChat } from './chat-store'
 import { useRoomUi } from './room-ui'
+import { useSettingsUi } from '@/stores/settings-ui'
 import { useScreenShareState, type ScreenShareController } from './screen-share'
 
 function ControlButton({
@@ -138,7 +139,7 @@ export function ControlBar({
   const togglePanel = useRoomUi((s) => s.togglePanel)
   const unread = useChat((s) => s.unread)
   const setPickerOpen = useRoomUi((s) => s.setPickerOpen)
-  const setSettingsOpen = useRoomUi((s) => s.setSettingsOpen)
+  const setSettingsOpen = useSettingsUi((s) => s.setOpen)
 
   const sharing = share.status === 'live'
 

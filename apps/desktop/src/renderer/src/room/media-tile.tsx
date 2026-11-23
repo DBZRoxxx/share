@@ -3,7 +3,7 @@ import {
   useIsSpeaking,
   type TrackReferenceOrPlaceholder,
 } from '@livekit/components-react'
-import { Track, type Participant, type VideoTrack } from 'livekit-client'
+import { ParticipantEvent, Track, type Participant, type VideoTrack } from 'livekit-client'
 import {
   Expand,
   MicOff,
@@ -15,7 +15,14 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react'
-import { useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import {
+  useCallback,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
 import { Slider, Tooltip } from '@/components/ui/primitives'
 import { cn, hueFor, initials } from '@/lib/utils'
 import { usePrefs } from '@/stores/prefs'
@@ -28,9 +35,33 @@ export function displayName(p: Participant): string {
   return p.name || p.identity.slice(0, 8)
 }
 
-function useParticipantFlag(participant: Participant, source: Track.Source) {
-  const pub = participant.getTrackPublication(source)
-  return { published: !!pub, muted: pub?.isMuted ?? true }
+const MIC_EVENTS = [
+  ParticipantEvent.TrackMuted,
+  ParticipantEvent.TrackUnmuted,
+  ParticipantEvent.TrackPublished,
+  ParticipantEvent.TrackUnpublished,
+  ParticipantEvent.LocalTrackPublished,
+  ParticipantEvent.LocalTrackUnpublished,
+] as const
+
+/**
+ * True when the participant's microphone is off: never turned on (no track)
+ * or muted. Re-renders on every change, for everyone in the room.
+ */
+export function useMicMuted(participant: Participant): boolean {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      for (const e of MIC_EVENTS) participant.on(e, onChange)
+      return () => {
+        for (const e of MIC_EVENTS) participant.off(e, onChange)
+      }
+    },
+    [participant],
+  )
+  return useSyncExternalStore(subscribe, () => {
+    const pub = participant.getTrackPublication(Track.Source.Microphone)
+    return !pub || pub.isMuted
+  })
 }
 
 export function Avatar({
@@ -42,14 +73,23 @@ export function Avatar({
   size?: 'xs' | 'sm' | 'md' | 'lg'
   speaking?: boolean
 }) {
+  const muted = useMicMuted(participant)
   return (
     <NameAvatar
       seed={participant.identity}
       name={displayName(participant)}
       size={size}
-      speaking={speaking}
+      speaking={speaking && !muted}
+      muted={muted}
     />
   )
+}
+
+const BADGE_SIZES = {
+  xs: 'size-3.5 [&_svg]:size-2',
+  sm: 'size-4 [&_svg]:size-2.5',
+  md: 'size-6 [&_svg]:size-3.5',
+  lg: 'size-8 [&_svg]:size-4.5',
 }
 
 /** Avatar from a name alone (e.g. chat authors who already left the room). */
@@ -58,11 +98,14 @@ export function NameAvatar({
   name,
   size = 'md',
   speaking,
+  muted,
 }: {
   seed: string
   name: string
   size?: 'xs' | 'sm' | 'md' | 'lg'
   speaking?: boolean
+  /** Shows a "microphone off" badge. */
+  muted?: boolean
 }) {
   const hue = hueFor(seed)
   const sizes = {
@@ -72,18 +115,33 @@ export function NameAvatar({
     lg: 'size-24 text-3xl',
   }
   return (
-    <span
-      className={cn(
-        'ring-offset-surface flex shrink-0 items-center justify-center rounded-full font-semibold text-white ring-offset-2 transition-shadow',
-        sizes[size],
-        speaking && 'ring-success ring-2',
+    <span className="relative inline-flex shrink-0">
+      <span
+        className={cn(
+          'ring-offset-surface flex shrink-0 items-center justify-center rounded-full font-semibold text-white ring-offset-2 transition-shadow',
+          sizes[size],
+          speaking && 'ring-success ring-2',
+        )}
+        style={{
+          background: `linear-gradient(135deg, hsl(${hue} 70% 58%), hsl(${(hue + 40) % 360} 65% 45%))`,
+        }}
+        aria-hidden="true"
+      >
+        {initials(name)}
+      </span>
+      {muted && (
+        <span
+          className={cn(
+            'bg-danger border-surface-2 absolute -right-0.5 -bottom-0.5 flex items-center justify-center rounded-full border-2 text-white',
+            BADGE_SIZES[size],
+          )}
+          role="img"
+          aria-label="Microfone desligado"
+          title="Microfone desligado"
+        >
+          <MicOff />
+        </span>
       )}
-      style={{
-        background: `linear-gradient(135deg, hsl(${hue} 70% 58%), hsl(${(hue + 40) % 360} 65% 45%))`,
-      }}
-      aria-hidden="true"
-    >
-      {initials(name)}
     </span>
   )
 }
@@ -136,7 +194,7 @@ export function MediaTile({
 
   const tileRef = useRef<HTMLDivElement>(null)
   const speaking = useIsSpeaking(participant)
-  const mic = useParticipantFlag(participant, Track.Source.Microphone)
+  const micMuted = useMicMuted(participant)
   const showStats = usePrefs((s) => s.showStats)
 
   const layout = useRoomUi((s) => s.layout)
@@ -218,8 +276,8 @@ export function MediaTile({
       {/* Name label */}
       <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-lg bg-black/60 px-2 py-1 text-xs font-medium text-white backdrop-blur">
         {isScreen && <MonitorUp className="size-3.5 shrink-0" />}
-        {!isScreen && mic.published && mic.muted && (
-          <MicOff className="text-danger size-3.5 shrink-0" />
+        {!isScreen && micMuted && (
+          <MicOff className="text-danger size-3.5 shrink-0" aria-label="Microfone desligado" />
         )}
         <span className="truncate">{label}</span>
       </div>

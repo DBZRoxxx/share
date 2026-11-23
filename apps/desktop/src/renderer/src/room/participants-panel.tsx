@@ -4,7 +4,7 @@ import { Camera, Link2, Mic, MicOff, MonitorUp, Volume2, VolumeX } from 'lucide-
 import { Button } from '@/components/ui/button'
 import { Slider, Tooltip } from '@/components/ui/primitives'
 import { cn } from '@/lib/utils'
-import { Avatar, displayName } from './media-tile'
+import { Avatar, displayName, useMicMuted } from './media-tile'
 import { micKey, useRoomUi } from './room-ui'
 
 /** People tab of the side panel. */
@@ -41,17 +41,26 @@ function ParticipantRow({ participant }: { participant: Participant }) {
 
   const screen = participant.getTrackPublication(Track.Source.ScreenShare)
   const camera = participant.getTrackPublication(Track.Source.Camera)
-  const mic = participant.getTrackPublication(Track.Source.Microphone)
-  const micOn = !!mic && !mic.isMuted
+  const micOn = !useMicMuted(participant)
 
   return (
     <li className="group hover:bg-surface-2 rounded-xl px-2 py-2">
       <div className="flex items-center gap-3">
         <Avatar participant={participant} size="sm" speaking={speaking} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">
-            {displayName(participant)}
-            {participant.isLocal && <span className="text-muted font-normal"> (você)</span>}
+          <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+            <span className="truncate">
+              {displayName(participant)}
+              {participant.isLocal && <span className="text-muted font-normal"> (você)</span>}
+            </span>
+            {!micOn && (
+              <Tooltip content="Microfone desligado">
+                <MicOff
+                  className="text-danger size-3.5 shrink-0"
+                  aria-label="Microfone desligado"
+                />
+              </Tooltip>
+            )}
           </p>
           {screen && <p className="text-accent text-xs">Compartilhando a tela</p>}
         </div>
@@ -66,12 +75,9 @@ function ParticipantRow({ participant }: { participant: Participant }) {
               <Camera aria-label="Câmera ligada" />
             </Tooltip>
           )}
-          {mic &&
-            (micOn ? (
-              <Mic className={cn(speaking && 'text-success')} aria-label="Microfone ligado" />
-            ) : (
-              <MicOff className="text-danger" aria-label="Microfone desligado" />
-            ))}
+          {micOn && (
+            <Mic className={cn(speaking && 'text-success')} aria-label="Microfone ligado" />
+          )}
         </div>
       </div>
       {!participant.isLocal && micOn && (

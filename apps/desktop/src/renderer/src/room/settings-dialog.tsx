@@ -1,30 +1,59 @@
-import { useLocalParticipant, useRoomContext } from '@livekit/components-react'
+import { RoomContext, useLocalParticipant, useRoomContext } from '@livekit/components-react'
 import { DISPLAY_NAME_MAX } from '@share/shared'
 import type { MainSettings } from '@shared/ipc'
-import { RefreshCw } from 'lucide-react'
+import { Play, RefreshCw, Volume2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, Field, Input, Select, Switch } from '@/components/ui/primitives'
+import {
+  Dialog,
+  DialogContent,
+  Field,
+  Input,
+  Select,
+  Slider,
+  Switch,
+} from '@/components/ui/primitives'
 import { useDevices } from '@/lib/devices'
 import { CODEC_LABELS } from '@/lib/media'
-import { usePrefs, type PreferredCodec } from '@/stores/prefs'
+import { previewSound } from '@/lib/sounds'
+import { cn } from '@/lib/utils'
+import { usePrefs, type PreferredCodec, type ReactionNotify } from '@/stores/prefs'
+import { useSettingsUi } from '@/stores/settings-ui'
 import { checkForUpdates, useUpdate } from '@/stores/update'
-import { useRoomUi } from './room-ui'
 
 export function SettingsDialog() {
-  const open = useRoomUi((s) => s.settingsOpen)
-  const setOpen = useRoomUi((s) => s.setSettingsOpen)
+  const open = useSettingsUi((s) => s.open)
+  const setOpen = useSettingsUi((s) => s.setOpen)
+  const room = useSettingsUi((s) => s.room)
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent title="Configurações" description="Dispositivos, qualidade e exibição.">
-        {open && <SettingsBody />}
+      <DialogContent
+        title="Configurações"
+        description={
+          room
+            ? 'Dispositivos, vídeo, notificações e app.'
+            : 'Notificações e app. Valem para todas as salas.'
+        }
+      >
+        {open && (
+          <div className="flex flex-col gap-5 overflow-y-auto px-6 pb-6">
+            {room && (
+              <RoomContext.Provider value={room}>
+                <RoomSections />
+              </RoomContext.Provider>
+            )}
+            <NotificationsSection />
+            <AppSection />
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )
 }
 
-function SettingsBody() {
+/** Settings that act on the room the user is in (devices switch live). */
+function RoomSections() {
   const room = useRoomContext()
   const { localParticipant } = useLocalParticipant()
   const prefs = usePrefs()
@@ -57,7 +86,7 @@ function SettingsBody() {
   }
 
   return (
-    <div className="flex flex-col gap-5 overflow-y-auto px-6 pb-6">
+    <>
       <section className="flex flex-col gap-3">
         <h3 className="text-muted text-xs font-semibold tracking-wide uppercase">Você</h3>
         <Field label="Apelido">
@@ -138,9 +167,83 @@ function SettingsBody() {
           onChange={(v) => prefs.set({ showStats: v })}
         />
       </section>
+    </>
+  )
+}
 
-      <AppSection />
-    </div>
+const REACTION_OPTIONS: { value: ReactionNotify; label: string }[] = [
+  { value: 'all', label: 'Todas' },
+  { value: 'mine', label: 'Só nas minhas mensagens' },
+  { value: 'off', label: 'Nenhuma' },
+]
+
+/** Per user: applies to every room, now and later. */
+function NotificationsSection() {
+  const n = usePrefs((s) => s.notifications)
+  const setN = usePrefs((s) => s.setNotifications)
+  return (
+    <section className="flex flex-col gap-3">
+      <h3 className="text-muted text-xs font-semibold tracking-wide uppercase">Notificações</h3>
+      <ToggleRow
+        label="Mensagens novas"
+        hint="Avisa cada mensagem no chat da sala."
+        checked={n.messages}
+        onChange={(v) => setN({ messages: v })}
+      />
+      <ToggleRow
+        label="Respostas às suas mensagens"
+        hint="Aviso e som próprios quando alguém responde você."
+        checked={n.replies}
+        onChange={(v) => setN({ replies: v })}
+      />
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium">Reações</p>
+          <p className="text-muted text-xs">Quando alguém reage a uma mensagem.</p>
+        </div>
+        <div className="w-52 shrink-0">
+          <Select
+            aria-label="Notificar reações"
+            value={n.reactions}
+            options={REACTION_OPTIONS}
+            onValueChange={(v) => setN({ reactions: v as ReactionNotify })}
+          />
+        </div>
+      </div>
+      <ToggleRow
+        label="Entrada e saída de pessoas"
+        hint="Som (e aviso) quando alguém entra ou sai da sala."
+        checked={n.joinLeave}
+        onChange={(v) => setN({ joinLeave: v })}
+      />
+      <ToggleRow
+        label="Notificações do Windows"
+        hint="Quando o Share está minimizado, na bandeja ou atrás de outras janelas."
+        checked={n.desktop}
+        onChange={(v) => setN({ desktop: v })}
+      />
+      <ToggleRow
+        label="Sons"
+        hint="Um som curto para cada notificação."
+        checked={n.sounds}
+        onChange={(v) => setN({ sounds: v })}
+      />
+      <div className={cn('flex items-center gap-3', !n.sounds && 'pointer-events-none opacity-50')}>
+        <Volume2 className="text-muted size-4 shrink-0" aria-hidden="true" />
+        <Slider
+          aria-label="Volume das notificações"
+          min={0}
+          max={1}
+          step={0.05}
+          value={[n.volume]}
+          onValueChange={([v]) => setN({ volume: v ?? 0 })}
+          onValueCommit={() => previewSound('message')}
+        />
+        <Button size="sm" variant="secondary" onClick={() => previewSound('message')}>
+          <Play /> Testar som
+        </Button>
+      </div>
+    </section>
   )
 }
 

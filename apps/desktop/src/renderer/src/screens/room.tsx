@@ -28,14 +28,15 @@ import { setChatAuth } from '@/lib/chat-api'
 import { fetchToken } from '@/lib/token'
 import { useNav } from '@/stores/nav'
 import { usePrefs } from '@/stores/prefs'
+import { useSettingsUi } from '@/stores/settings-ui'
 import { setResumeProvider } from '@/stores/update'
 import { AudioRenderer } from '@/room/audio-renderer'
 import { ControlBar, useMediaToggles } from '@/room/control-bar'
 import { displayName } from '@/room/media-tile'
+import { notifyPresence } from '@/room/notify'
 import { tileKey, useRoomUi } from '@/room/room-ui'
 import { ScreenPicker } from '@/room/screen-picker'
 import { ScreenShareController } from '@/room/screen-share'
-import { SettingsDialog } from '@/room/settings-dialog'
 import { SidePanel } from '@/room/side-panel'
 import { useChatTransport } from '@/room/use-chat'
 import { useChat } from '@/room/chat-store'
@@ -298,6 +299,12 @@ function ConnectedRoom({
   useChatTransport(room, roomId, chatSeed)
   useResumeProvider(roomId, room, controller)
   useRoomNameSync(room, roomId)
+
+  // The app-wide settings dialog shows this room's devices while connected.
+  useEffect(() => {
+    useSettingsUi.setState({ room })
+    return () => useSettingsUi.setState({ room: null })
+  }, [room])
   const roomName = useRoomInfo((s) => s.name)
 
   useEffect(() => {
@@ -350,7 +357,6 @@ function ConnectedRoom({
       <ControlBar controller={controller} onLeave={leave} />
       <AudioRenderer />
       <ScreenPicker controller={controller} />
-      <SettingsDialog />
     </div>
   )
 }
@@ -390,7 +396,7 @@ function useRoomToasts(room: Room) {
       if (since && Date.now() - since < UPDATE_REJOIN_WINDOW_MS) {
         returned.set(p.identity, Date.now())
         toast(`${displayName(p)} voltou (app atualizado)`, { id: `updating-${p.identity}` })
-      } else {
+      } else if (notifyPresence(displayName(p), true)) {
         toast(`${displayName(p)} entrou na sala`)
       }
     }
@@ -400,7 +406,7 @@ function useRoomToasts(room: Room) {
         toast(`${displayName(p)} está atualizando o app…`, { id: `updating-${p.identity}` })
         return
       }
-      toast(`${displayName(p)} saiu da sala`)
+      if (notifyPresence(displayName(p), false)) toast(`${displayName(p)} saiu da sala`)
     }
     const published = (pub: RemoteTrackPublication, p: RemoteParticipant) => {
       if (pub.source !== Track.Source.ScreenShare) return

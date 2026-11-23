@@ -5,6 +5,7 @@ import { TooltipProvider } from '@/components/ui/primitives'
 import { HomeScreen } from '@/screens/home'
 import { PreJoinScreen } from '@/screens/prejoin'
 import { RoomScreen } from '@/screens/room'
+import { SettingsDialog } from '@/room/settings-dialog'
 import { useNav } from '@/stores/nav'
 import { usePrefs } from '@/stores/prefs'
 import { initUpdates, runScheduledUpdate } from '@/stores/update'
@@ -83,6 +84,7 @@ export function App() {
       ) : (
         <HomeScreen />
       )}
+      <SettingsDialog />
       <Toaster
         theme="dark"
         position="top-center"

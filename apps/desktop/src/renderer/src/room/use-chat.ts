@@ -9,7 +9,6 @@ import {
   type ChatEnvelope,
   type ChatHistory,
   type ChatMessage,
-  type ChatPayload,
   type Gif,
   type ReplyTo,
 } from '@share/shared/chat'
@@ -22,7 +21,10 @@ import { useChat, type StagedFile } from './chat-store'
 import { ChatSync, TOPIC_CHAT } from './chat-sync'
 import { stageFiles } from './stage-files'
 import { displayName } from './media-tile'
+import { deliverChatNotice } from './notify'
+import { chatNotice } from './notify-rules'
 import { useRoomUi } from './room-ui'
+import { usePrefs } from '@/stores/prefs'
 
 /** v0.2 peers ask the oldest participant for the history over RPC. */
 const RPC_HISTORY = 'share.chat.history'
@@ -32,41 +34,9 @@ const MAX_CLOCK_SKEW_MS = 30_000
 
 let sync: ChatSync | null = null
 
-export function preview(payload: ChatPayload): string {
-  if (payload.kind === 'file') {
-    const image = isImageMime(payload.file.mime)
-    const label = image ? '📷 Foto' : `📎 ${payload.file.name}`
-    return payload.text ? `${label} · ${payload.text}` : label
-  }
-  return messageSnippet(payload).snippet
-}
-
 /** True when the user can't see the chat right now (other tab, hidden, unfocused). */
 function chatHidden(): boolean {
   return useRoomUi.getState().panel !== 'chat' || document.hidden || !document.hasFocus()
-}
-
-function notify(author: string, payload: ChatPayload) {
-  const body = preview(payload)
-  if (document.hidden || !document.hasFocus()) {
-    // Window is in the tray or behind other apps: use a Windows notification.
-    try {
-      const n = new Notification(author, { body: body.slice(0, 200), tag: 'share-chat' })
-      n.onclick = () => {
-        void window.share.app.show()
-        useRoomUi.getState().setPanel('chat')
-      }
-    } catch {
-      // Notifications unavailable; the unread badge still shows.
-    }
-    return
-  }
-  if (useRoomUi.getState().panel === 'chat') return
-  toast(author, {
-    id: 'chat-message',
-    description: body.length > 120 ? `${body.slice(0, 120)}…` : body,
-    action: { label: 'Abrir chat', onClick: () => useRoomUi.getState().setPanel('chat') },
-  })
 }
 
 /** Wires the chat to the room (live) and the server (history) while mounted. */
@@ -91,7 +61,16 @@ export function useChatTransport(room: Room, roomId: string, seed: ChatEnvelope[
           { from: identity, fromName, event },
           isMessage && chatHidden(),
         )
-        if (changed && isMessage) notify(fromName, event)
+        if (changed) {
+          const envelope = { from: identity, fromName, event }
+          const chat = useChat.getState()
+          const notice = chatNotice(envelope, {
+            me: room.localParticipant.identity,
+            prefs: usePrefs.getState().notifications,
+            messages: chat.messages,
+          })
+          if (notice) deliverChatNotice(notice)
+        }
         if (changed && event.kind === 'delete') forgetDeleted(event.target)
       })
     })

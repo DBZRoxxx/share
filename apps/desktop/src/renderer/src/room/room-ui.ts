@@ -24,7 +24,6 @@ interface RoomUiState {
   /** Side panel tab, or null when closed. */
   panel: SidePanel | null
   pickerOpen: boolean
-  settingsOpen: boolean
   poppedOut: Record<string, true>
   /** Per audio track volume, 0..1 (missing = 1). */
   volumes: Record<string, number>
@@ -38,7 +37,6 @@ interface RoomUiState {
   /** Opens the tab, or closes the panel if that tab is already showing. */
   togglePanel: (panel: SidePanel) => void
   setPickerOpen: (open: boolean) => void
-  setSettingsOpen: (open: boolean) => void
   setPoppedOut: (key: string, popped: boolean) => void
   setVolume: (key: string, volume: number) => void
   toggleMute: (key: string) => void
@@ -49,7 +47,6 @@ const initial = {
   spotlightKey: null,
   panel: null as SidePanel | null,
   pickerOpen: false,
-  settingsOpen: false,
   poppedOut: {},
   volumes: {},
   lastVolumes: {},
@@ -68,7 +65,6 @@ export const useRoomUi = create<RoomUiState>()((set) => ({
   setPanel: (panel) => set({ panel }),
   togglePanel: (panel) => set((s) => ({ panel: s.panel === panel ? null : panel })),
   setPickerOpen: (pickerOpen) => set({ pickerOpen }),
-  setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setPoppedOut: (key, popped) =>
     set((s) => {
       const poppedOut = { ...s.poppedOut }

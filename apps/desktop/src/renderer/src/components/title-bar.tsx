@@ -1,6 +1,7 @@
-import { Clock, Download, Loader2, RefreshCw, RotateCw, Zap } from 'lucide-react'
+import { Clock, Download, Loader2, RefreshCw, RotateCw, Settings, Zap } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { useSettingsUi } from '@/stores/settings-ui'
 import { applyUpdate, checkForUpdates, useUpdate } from '@/stores/update'
 import { Button } from './ui/button'
 import { Logo } from './logo'
@@ -25,6 +26,16 @@ export function TitleBar({ children, className }: { children?: ReactNode; classN
       <div className="flex min-w-0 flex-1 items-center gap-3">{children}</div>
       <UpdatePill />
       <CheckUpdatesButton />
+      <Tooltip content="Configurações" side="bottom">
+        <button
+          type="button"
+          aria-label="Configurações"
+          onClick={() => useSettingsUi.getState().setOpen(true)}
+          className="no-drag text-muted hover:bg-surface-2 hover:text-fg flex size-7 items-center justify-center rounded-md transition-colors"
+        >
+          <Settings className="size-4" />
+        </button>
+      </Tooltip>
     </header>
   )
 }
