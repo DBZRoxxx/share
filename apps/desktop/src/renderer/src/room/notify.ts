@@ -1,4 +1,5 @@
 import { toast } from 'sonner'
+import appIcon from '@/assets/app-icon.png'
 import { playSound } from '@/lib/sounds'
 import { usePrefs } from '@/stores/prefs'
 import { useChat } from './chat-store'
@@ -32,7 +33,12 @@ function nativeNotification(title: string, body: string, tag: string, onClick: (
   window.__notified?.push({ title, body, native: true })
   try {
     // Silent: the app plays its own sound (and respects its volume).
-    const n = new Notification(title, { body: body.slice(0, 200), tag, silent: true })
+    const n = new Notification(title, {
+      body: body.slice(0, 200),
+      tag,
+      silent: true,
+      icon: appIcon,
+    })
     n.onclick = onClick
   } catch {
     // Notifications unavailable; the unread badge still shows.

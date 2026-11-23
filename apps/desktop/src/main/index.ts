@@ -16,6 +16,7 @@ import {
   getUpdateStatus,
   setupAutoUpdates,
 } from './updater'
+import { APP_ID, applyWindowIdentity, registerToastIdentity } from './windows-identity'
 
 // ---------------------------------------------------------------------------
 // Dev helpers: `--multi-instance --profile=2` runs a second, isolated client on
@@ -111,6 +112,9 @@ function createWindow() {
     },
   })
   mainWindow = win
+  applyWindowIdentity(win)
+  // Pop-out stream windows group with the app in the taskbar too.
+  win.webContents.on('did-create-window', (child) => applyWindowIdentity(child))
 
   win.once('ready-to-show', () => win.show())
   // The app lives in the tray for days: look for updates when the user comes back to it.
@@ -277,7 +281,8 @@ function registerIpc() {
 }
 
 function onReady() {
-  app.setAppUserModelId('com.dbzroxxx.share')
+  app.setAppUserModelId(APP_ID)
+  void registerToastIdentity(icon)
   configureSession()
   registerIpc()
   cleanupHotBundles()
