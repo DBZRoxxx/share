@@ -6,7 +6,7 @@ import { chatNotice } from './notify-rules'
 const prefs: NotificationPrefs = {
   messages: true,
   replies: true,
-  reactions: 'all',
+  reactions: true,
   joinLeave: true,
   desktop: true,
   sounds: true,
@@ -65,17 +65,16 @@ describe('chatNotice', () => {
     expect(chatNotice(toBruno, ctx())).toMatchObject({ kind: 'message' })
   })
 
-  it('announces reactions according to the setting', () => {
+  it('announces reactions to my messages only', () => {
     expect(chatNotice(react('m1', '👍'), ctx())).toMatchObject({
       kind: 'reaction',
       title: 'Ana reagiu 👍',
       body: 'à sua mensagem: “minha mensagem”',
       messageId: 'm1',
     })
-    expect(chatNotice(react('m2', '❤️'), ctx())?.body).toBe('à mensagem de Bruno: “do bruno”')
-    expect(chatNotice(react('m2', '❤️'), ctx({ reactions: 'mine' }))).toBeNull()
-    expect(chatNotice(react('m1', '❤️'), ctx({ reactions: 'mine' }))).not.toBeNull()
-    expect(chatNotice(react('m1', '👍'), ctx({ reactions: 'off' }))).toBeNull()
+    // Ana reacting to Bruno's message is between them.
+    expect(chatNotice(react('m2', '❤️'), ctx())).toBeNull()
+    expect(chatNotice(react('m1', '👍'), ctx({ reactions: false }))).toBeNull()
   })
 
   it('ignores removed reactions, unknown targets and my own reactions', () => {

@@ -11,15 +11,14 @@ export interface RecentRoom {
   name?: string | null
 }
 
-export type ReactionNotify = 'all' | 'mine' | 'off'
-
 /** How the app gets the user's attention. Per user: applies to every room. */
 export interface NotificationPrefs {
   /** New chat messages. */
   messages: boolean
   /** Replies to the user's own messages (own wording and sound). */
   replies: boolean
-  reactions: ReactionNotify
+  /** Reactions to the user's own messages (never to other people's). */
+  reactions: boolean
   /** People joining and leaving the room. */
   joinLeave: boolean
   /** Windows notifications while the app is in the background (tray, minimized, unfocused). */
@@ -32,7 +31,7 @@ export interface NotificationPrefs {
 export const DEFAULT_NOTIFICATIONS: NotificationPrefs = {
   messages: true,
   replies: true,
-  reactions: 'all',
+  reactions: true,
   joinLeave: true,
   desktop: true,
   sounds: true,
@@ -119,7 +118,15 @@ export const usePrefs = create<PrefsState>()(
         return {
           ...current,
           ...saved,
-          notifications: { ...DEFAULT_NOTIFICATIONS, ...saved.notifications },
+          notifications: {
+            ...DEFAULT_NOTIFICATIONS,
+            ...saved.notifications,
+            // Pre-release builds stored a choice ('all' | 'mine' | 'off').
+            reactions:
+              typeof saved.notifications?.reactions === 'boolean'
+                ? saved.notifications.reactions
+                : saved.notifications?.reactions !== 'off',
+          },
         }
       },
     },

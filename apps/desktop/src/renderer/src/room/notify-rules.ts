@@ -59,16 +59,15 @@ export function chatNotice(
     return { kind: 'message', title: fromName, body: preview(event), messageId: event.id }
   }
 
-  if (event.kind !== 'react' || !event.emoji || prefs.reactions === 'off') return null
+  // Reactions only concern the author of the message: a reaction between two
+  // other people is not the user's business (replies are, they're messages).
+  if (event.kind !== 'react' || !event.emoji || !prefs.reactions) return null
   const target = ctx.messages.find((m) => m.payload.id === event.target)
-  if (!target || target.deleted) return null
-  const mine = target.from === ctx.me
-  if (prefs.reactions === 'mine' && !mine) return null
-  const whose = mine ? 'à sua mensagem' : `à mensagem de ${target.fromName}`
+  if (!target || target.deleted || target.from !== ctx.me) return null
   return {
     kind: 'reaction',
     title: `${fromName} reagiu ${event.emoji}`,
-    body: `${whose}: ${quote(preview(target.payload))}`,
+    body: `à sua mensagem: ${quote(preview(target.payload))}`,
     messageId: target.payload.id,
   }
 }

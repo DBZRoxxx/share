@@ -18,7 +18,7 @@ import { useDevices } from '@/lib/devices'
 import { CODEC_LABELS } from '@/lib/media'
 import { previewSound } from '@/lib/sounds'
 import { cn } from '@/lib/utils'
-import { usePrefs, type PreferredCodec, type ReactionNotify } from '@/stores/prefs'
+import { usePrefs, type PreferredCodec } from '@/stores/prefs'
 import { useSettingsUi } from '@/stores/settings-ui'
 import { checkForUpdates, useUpdate } from '@/stores/update'
 
@@ -171,12 +171,6 @@ function RoomSections() {
   )
 }
 
-const REACTION_OPTIONS: { value: ReactionNotify; label: string }[] = [
-  { value: 'all', label: 'Todas' },
-  { value: 'mine', label: 'Só nas minhas mensagens' },
-  { value: 'off', label: 'Nenhuma' },
-]
-
 /** Per user: applies to every room, now and later. */
 function NotificationsSection() {
   const n = usePrefs((s) => s.notifications)
@@ -196,20 +190,12 @@ function NotificationsSection() {
         checked={n.replies}
         onChange={(v) => setN({ replies: v })}
       />
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium">Reações</p>
-          <p className="text-muted text-xs">Quando alguém reage a uma mensagem.</p>
-        </div>
-        <div className="w-52 shrink-0">
-          <Select
-            aria-label="Notificar reações"
-            value={n.reactions}
-            options={REACTION_OPTIONS}
-            onValueChange={(v) => setN({ reactions: v as ReactionNotify })}
-          />
-        </div>
-      </div>
+      <ToggleRow
+        label="Reações às suas mensagens"
+        hint="Quando alguém reage a uma mensagem sua. Reações entre outras pessoas não avisam."
+        checked={n.reactions}
+        onChange={(v) => setN({ reactions: v })}
+      />
       <ToggleRow
         label="Entrada e saída de pessoas"
         hint="Som (e aviso) quando alguém entra ou sai da sala."
