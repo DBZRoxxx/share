@@ -77,10 +77,17 @@ export function App() {
           key={view.roomId}
           roomId={view.roomId}
           resume={view.resume}
-          roomName={view.roomName}
+          create={view.create}
+          roomKey={view.roomKey}
         />
       ) : view.name === 'prejoin' || view.name === 'room' ? (
-        <PreJoinScreen key={view.roomId} roomId={view.roomId} roomName={view.roomName} />
+        <PreJoinScreen
+          key={view.roomId}
+          roomId={view.roomId}
+          create={view.create}
+          roomKey={view.roomKey}
+          error={view.error}
+        />
       ) : (
         <HomeScreen />
       )}

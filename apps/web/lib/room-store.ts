@@ -27,6 +27,18 @@ export async function claimRoomName(
   return current
 }
 
+/** Names of several rooms in one round trip (rooms without one are left out). */
+export async function getRoomNames(redis: Redis, roomIds: string[]): Promise<Map<string, string>> {
+  const names = new Map<string, string>()
+  if (!roomIds.length) return names
+  const values = (await redis.mget(...roomIds.map(nameKey))) as unknown[]
+  roomIds.forEach((id, i) => {
+    const v = values[i]
+    if (typeof v === 'string' && v) names.set(id, v)
+  })
+  return names
+}
+
 export async function setRoomName(redis: Redis, roomId: string, name: string | null) {
   if (name) await redis.set(nameKey(roomId), name, { ex: NAME_TTL_S })
   else await redis.del(nameKey(roomId))

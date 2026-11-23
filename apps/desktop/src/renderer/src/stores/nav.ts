@@ -3,21 +3,29 @@ import { create } from 'zustand'
 
 export type View =
   | { name: 'home' }
-  /** `roomName`: name chosen for a room being created. */
-  | { name: 'prejoin'; roomId: string; roomName?: string }
+  | ({ name: 'prejoin'; roomId: string } & JoinOptions)
   /** `resume`: coming back after an update, restore cam/mic/screen/chat. */
-  | { name: 'room'; roomId: string; resume?: ResumeState; roomName?: string }
+  | ({ name: 'room'; roomId: string; resume?: ResumeState } & JoinOptions)
+
+export interface JoinOptions {
+  /** The user is creating this room (with these name and password). */
+  create?: { name?: string; password?: string }
+  /** Access to a private room for this session (not remembered). */
+  roomKey?: string
+  /** Shown on the prejoin screen (e.g. the password changed). */
+  error?: string
+}
 
 interface NavState {
   view: View
   goHome: () => void
-  goPrejoin: (roomId: string, roomName?: string) => void
-  enterRoom: (roomId: string, opts?: { resume?: ResumeState; roomName?: string }) => void
+  goPrejoin: (roomId: string, opts?: JoinOptions) => void
+  enterRoom: (roomId: string, opts?: JoinOptions & { resume?: ResumeState }) => void
 }
 
 export const useNav = create<NavState>()((set) => ({
   view: { name: 'home' },
   goHome: () => set({ view: { name: 'home' } }),
-  goPrejoin: (roomId, roomName) => set({ view: { name: 'prejoin', roomId, roomName } }),
+  goPrejoin: (roomId, opts) => set({ view: { name: 'prejoin', roomId, ...opts } }),
   enterRoom: (roomId, opts) => set({ view: { name: 'room', roomId, ...opts } }),
 }))

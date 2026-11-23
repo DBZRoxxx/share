@@ -9,7 +9,16 @@ export interface RecentRoom {
   lastJoinedAt: number
   /** Custom room name, when it has one. */
   name?: string | null
+  /** Created on this computer (shows under "Criadas por você"). */
+  createdByMe?: boolean
+  private?: boolean
+  /** Access key for a private room, when the user chose to be remembered. */
+  roomKey?: string | null
+  /** Lets the creator manage the room's password. */
+  ownerKey?: string | null
 }
+
+export type RecentRoomInfo = Partial<Omit<RecentRoom, 'id' | 'lastJoinedAt'>>
 
 /** How the app gets the user's attention. Per user: applies to every room. */
 export interface NotificationPrefs {
@@ -58,18 +67,25 @@ interface PrefsState {
     partial: Partial<
       Omit<
         PrefsState,
-        'set' | 'addRecentRoom' | 'removeRecentRoom' | 'nameRecentRoom' | 'setNotifications'
+        | 'set'
+        | 'addRecentRoom'
+        | 'removeRecentRoom'
+        | 'nameRecentRoom'
+        | 'updateRecentRoom'
+        | 'setNotifications'
       >
     >,
   ) => void
-  /** `name`: undefined keeps the one already known. */
-  addRecentRoom: (id: string, name?: string | null) => void
+  /** Moves the room to the top; fields left undefined keep what was known. */
+  addRecentRoom: (id: string, info?: RecentRoomInfo) => void
   nameRecentRoom: (id: string, name: string | null) => void
+  /** Updates a known room without moving it. */
+  updateRecentRoom: (id: string, info: RecentRoomInfo) => void
   removeRecentRoom: (id: string) => void
   setNotifications: (partial: Partial<NotificationPrefs>) => void
 }
 
-const MAX_RECENT = 6
+const MAX_RECENT = 40
 
 export const usePrefs = create<PrefsState>()(
   persist(
@@ -91,14 +107,26 @@ export const usePrefs = create<PrefsState>()(
       set: (partial) => set(partial),
       setNotifications: (partial) =>
         set((s) => ({ notifications: { ...s.notifications, ...partial } })),
-      addRecentRoom: (id, name) =>
+      addRecentRoom: (id, info = {}) =>
         set((s) => {
           const known = s.recentRooms.find((r) => r.id === id)
+          const defined = Object.fromEntries(
+            Object.entries(info).filter(([, v]) => v !== undefined),
+          ) as RecentRoomInfo
           return {
             recentRooms: [
-              { id, lastJoinedAt: Date.now(), name: name === undefined ? known?.name : name },
+              { ...known, ...defined, id, lastJoinedAt: Date.now() },
               ...s.recentRooms.filter((r) => r.id !== id),
             ].slice(0, MAX_RECENT),
+          }
+        }),
+      updateRecentRoom: (id, info) =>
+        set((s) => {
+          const defined = Object.fromEntries(
+            Object.entries(info).filter(([, v]) => v !== undefined),
+          ) as RecentRoomInfo
+          return {
+            recentRooms: s.recentRooms.map((r) => (r.id === id ? { ...r, ...defined } : r)),
           }
         }),
       nameRecentRoom: (id, name) =>

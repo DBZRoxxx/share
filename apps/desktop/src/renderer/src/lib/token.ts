@@ -1,7 +1,15 @@
-import type { ErrorResponse, TokenRequest, TokenResponse } from '@share/shared'
+import type { ErrorResponse, RoomErrorCode, TokenRequest, TokenResponse } from '@share/shared'
 import { WEB_URL } from './config'
 
-export class TokenError extends Error {}
+export class TokenError extends Error {
+  constructor(
+    message: string,
+    /** Set when the room needs a (new) password. */
+    readonly code?: RoomErrorCode,
+  ) {
+    super(message)
+  }
+}
 
 export async function fetchToken(request: TokenRequest): Promise<TokenResponse> {
   if (!WEB_URL)
@@ -23,7 +31,7 @@ export async function fetchToken(request: TokenRequest): Promise<TokenResponse> 
 
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as ErrorResponse | null
-    throw new TokenError(body?.error ?? `Erro no servidor (${res.status}).`)
+    throw new TokenError(body?.error ?? `Erro no servidor (${res.status}).`, body?.code)
   }
   return (await res.json()) as TokenResponse
 }

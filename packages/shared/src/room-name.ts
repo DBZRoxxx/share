@@ -26,6 +26,8 @@ export const roomNameUpdateSchema = z.object({
 
 export interface RoomInfoResponse {
   name: string | null
+  /** Needs a password to enter (servers before v0.5.2 omit it). */
+  private?: boolean
 }
 
 /** Sent over LiveKit when someone renames the room, so everyone updates at once. */

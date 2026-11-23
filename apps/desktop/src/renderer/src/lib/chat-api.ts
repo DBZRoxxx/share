@@ -1,4 +1,11 @@
-import type { ErrorResponse, RoomInfoResponse } from '@share/shared'
+import type {
+  ErrorResponse,
+  RoomInfoResponse,
+  RoomPasswordResponse,
+  RoomPresenceResponse,
+  RoomSummary,
+  RoomUnlockResponse,
+} from '@share/shared'
 import type {
   ChatEvent,
   ChatEventsResponse,
@@ -122,20 +129,70 @@ export const chatApi = {
   },
 }
 
+export class RoomApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message)
+  }
+}
+
+async function publicJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (!WEB_URL) throw new RoomApiError('Servidor não configurado', 503)
+  let res: Response
+  try {
+    res = await fetch(`${WEB_URL}${path}`, {
+      ...init,
+      headers: init.body ? { 'Content-Type': 'application/json' } : undefined,
+      signal: AbortSignal.timeout(10_000),
+    })
+  } catch {
+    throw new RoomApiError('Sem conexão com o servidor', 0)
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as ErrorResponse | null
+    throw new RoomApiError(body?.error ?? `Erro ${res.status}`, res.status)
+  }
+  return (await res.json()) as T
+}
+
 export const roomApi = {
-  /** Public: the name shown before joining. Never throws. */
-  async name(roomId: string): Promise<string | null> {
-    if (!WEB_URL) return null
+  /** Public: name and privacy shown before joining. Null when unreachable. */
+  async info(roomId: string): Promise<RoomInfoResponse | null> {
     try {
-      const res = await fetch(`${WEB_URL}/api/rooms/${roomId}`, {
-        signal: AbortSignal.timeout(8000),
-      })
-      if (!res.ok) return null
-      return ((await res.json()) as RoomInfoResponse).name
+      return await publicJson<RoomInfoResponse>(`/api/rooms/${roomId}`)
     } catch {
       return null
     }
   },
+
+  /** People in each room right now (for the rooms list). Null when unreachable. */
+  async presence(roomIds: string[]): Promise<Record<string, RoomSummary> | null> {
+    if (!roomIds.length) return {}
+    try {
+      const res = await publicJson<RoomPresenceResponse>(
+        `/api/rooms/presence?ids=${roomIds.slice(0, 50).join(',')}`,
+      )
+      return res.rooms
+    } catch {
+      return null
+    }
+  },
+
+  /** Checks a private room's password; returns the key to enter it. */
+  unlock: (roomId: string, password: string) =>
+    publicJson<RoomUnlockResponse>(`/api/rooms/${roomId}/unlock`, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
+
+  /** Owner only: sets, changes or (with null) removes the password. */
+  setPassword: (roomId: string, ownerKey: string, password: string | null) =>
+    request<RoomPasswordResponse>(roomId, `/api/rooms/${roomId}/password`, {
+      method: 'PUT',
+      body: JSON.stringify({ ownerKey, password }),
+    }),
 
   rename: (roomId: string, name: string | null) =>
     request<RoomInfoResponse>(roomId, `/api/rooms/${roomId}`, {

@@ -3,6 +3,16 @@ import { AccessToken } from 'livekit-server-sdk'
 import { getRedis } from '@/lib/chat-db'
 import { corsHeaders, jsonResponse, rateLimited } from '@/lib/http'
 import { createRateLimiter } from '@/lib/rate-limit'
+import {
+  checkOwnerKey,
+  checkRoomKey,
+  claimOwner,
+  getRoomAccess,
+  ownerKeyFor,
+  roomKeyFor,
+  setRoomPassword,
+  touchRoomAccess,
+} from '@/lib/room-access'
 import { claimRoomName } from '@/lib/room-store'
 
 export const runtime = 'nodejs'
@@ -43,7 +53,57 @@ export async function POST(request: Request) {
     )
   }
 
-  const { roomId, name, identity, roomName } = parsed.data
+  const { roomId, name, identity, roomName, create, password, roomKey, ownerKey } = parsed.data
+
+  // Who may enter: private rooms need a room key (or the owner's key).
+  const redis = getRedis()
+  let access: {
+    private: boolean
+    owner: boolean
+    roomKey: string | null
+    ownerKey: string | null
+  } = {
+    private: false,
+    owner: false,
+    roomKey: null,
+    ownerKey: null,
+  }
+  if (redis) {
+    try {
+      const current = await getRoomAccess(redis, roomId)
+      let owner = current.owner
+      let isOwner = !!owner && owner === identity && checkOwnerKey(roomId, identity, ownerKey)
+      if (create && !owner) {
+        owner = await claimOwner(redis, roomId, identity)
+        isOwner = owner === identity
+      }
+      let auth = current.auth
+      if (isOwner && create && password && !auth) {
+        const v = await setRoomPassword(redis, roomId, password)
+        auth = v === null ? null : { salt: '', hash: '', v }
+      }
+      if (auth && !isOwner && !checkRoomKey(roomId, auth, roomKey)) {
+        return json<ErrorResponse>(
+          roomKey
+            ? { error: 'A senha da sala mudou. Digite a nova senha.', code: 'password_invalid' }
+            : { error: 'Esta sala é privada. Digite a senha.', code: 'password_required' },
+          401,
+        )
+      }
+      if (owner) void touchRoomAccess(redis, roomId).catch(() => undefined)
+      access = {
+        private: !!auth,
+        owner: isOwner,
+        roomKey: auth ? roomKeyFor(roomId, auth.v) : null,
+        ownerKey: isOwner ? ownerKeyFor(roomId, identity) : null,
+      }
+    } catch (error) {
+      // Can't tell whether the room is private: don't let anyone in.
+      console.error('room access unavailable', error)
+      return json<ErrorResponse>({ error: 'Servidor indisponível, tente de novo.' }, 503)
+    }
+  }
+
   const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity,
     name,
@@ -59,7 +119,6 @@ export async function POST(request: Request) {
   })
 
   // The room name is a nicety: never fail a join because storage is down.
-  const redis = getRedis()
   const storedName = redis
     ? await claimRoomName(redis, roomId, roomName || undefined).catch((error: unknown) => {
         console.error('room name unavailable', error)
@@ -67,5 +126,10 @@ export async function POST(request: Request) {
       })
     : null
 
-  return json<TokenResponse>({ token: await at.toJwt(), url: LIVEKIT_URL, roomName: storedName })
+  return json<TokenResponse>({
+    token: await at.toJwt(),
+    url: LIVEKIT_URL,
+    roomName: storedName,
+    ...access,
+  })
 }

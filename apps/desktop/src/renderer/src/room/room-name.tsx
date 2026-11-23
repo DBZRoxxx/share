@@ -1,16 +1,20 @@
 import {
   cleanRoomName,
-  formatRoomId,
   ROOM_NAME_MAX,
+  ROOM_PASSWORD_MAX,
+  ROOM_PASSWORD_MIN,
+  roomAccessMessageSchema,
   roomNameMessageSchema,
+  type RoomAccessMessage,
   type RoomNameMessage,
 } from '@share/shared'
 import type { Room } from 'livekit-client'
-import { Check, Pencil, X } from 'lucide-react'
+import { Check, Lock, LockOpen, Pencil, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { create } from 'zustand'
-import { Tooltip } from '@/components/ui/primitives'
+import { Button } from '@/components/ui/button'
+import { Input, Popover, PopoverContent, PopoverTrigger, Tooltip } from '@/components/ui/primitives'
 import { roomApi } from '@/lib/chat-api'
 import { cn } from '@/lib/utils'
 import { usePrefs } from '@/stores/prefs'
@@ -21,9 +25,20 @@ const TOPIC_ROOM = 'share.room'
 
 interface RoomInfoState {
   name: string | null
+  /** Needs a password to enter. */
+  private: boolean
+  /** The user created the room (can manage its password). */
+  owner: boolean
+  /** This session's access key (kept across an in-room update). */
+  roomKey: string | null
 }
 
-export const useRoomInfo = create<RoomInfoState>()(() => ({ name: null }))
+export const useRoomInfo = create<RoomInfoState>()(() => ({
+  name: null,
+  private: false,
+  owner: false,
+  roomKey: null,
+}))
 
 /** The room's name changed (here or elsewhere): update everything that shows it. */
 export function applyRoomName(roomId: string, name: string | null) {
@@ -39,19 +54,30 @@ export function useRoomNameSync(room: Room, roomId: string) {
   useEffect(() => {
     room.registerTextStreamHandler(TOPIC_ROOM, (reader, { identity }) => {
       void reader.readAll().then((raw) => {
-        let message: RoomNameMessage
+        let data: unknown
         try {
-          const parsed = roomNameMessageSchema.safeParse(JSON.parse(raw))
-          if (!parsed.success) return
-          message = parsed.data
+          data = JSON.parse(raw)
         } catch {
           return
         }
+        const p = room.getParticipantByIdentity(identity)
+        const who = p ? displayName(p) : 'Alguém'
+        const access = roomAccessMessageSchema.safeParse(data)
+        if (access.success) {
+          if (access.data.private === useRoomInfo.getState().private) return
+          useRoomInfo.setState({ private: access.data.private })
+          usePrefs.getState().updateRecentRoom(roomId, { private: access.data.private })
+          toast(
+            access.data.private ? `${who} colocou senha na sala` : `${who} tirou a senha da sala`,
+          )
+          return
+        }
+        const parsed = roomNameMessageSchema.safeParse(data)
+        if (!parsed.success) return
+        const message: RoomNameMessage = parsed.data
         const name = message.name || null
         if (name === useRoomInfo.getState().name) return
         applyRoomName(roomId, name)
-        const p = room.getParticipantByIdentity(identity)
-        const who = p ? displayName(p) : 'Alguém'
         toast(name ? `${who} renomeou a sala para “${name}”` : `${who} removeu o nome da sala`)
       })
     })
@@ -169,7 +195,123 @@ export function RoomTitle({ room, roomId }: { room: Room; roomId: string }) {
   )
 }
 
-/** "Noite do CS" or the room code, for places that need one label. */
-export function roomLabel(roomId: string, name: string | null | undefined): string {
-  return name || formatRoomId(roomId)
+/**
+ * Lock next to the room name: shows that the room is private, and lets its
+ * creator set, change or remove the password.
+ */
+export function RoomAccess({ room, roomId }: { room: Room; roomId: string }) {
+  const isPrivate = useRoomInfo((s) => s.private)
+  const owner = useRoomInfo((s) => s.owner)
+  const [open, setOpen] = useState(false)
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  if (!owner) {
+    if (!isPrivate) return null
+    return (
+      <Tooltip content="Sala privada: só entra quem souber a senha" side="bottom">
+        <span className="no-drag bg-accent/20 text-accent-hover flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold">
+          <Lock className="size-3.5" aria-hidden="true" /> Privada
+        </span>
+      </Tooltip>
+    )
+  }
+
+  const save = async (next: string | null) => {
+    const ownerKey = usePrefs.getState().recentRooms.find((r) => r.id === roomId)?.ownerKey
+    if (!ownerKey) {
+      toast.error('Só quem criou a sala, neste computador, pode mudar a senha.')
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await roomApi.setPassword(roomId, ownerKey, next)
+      useRoomInfo.setState({ private: res.private, roomKey: res.roomKey })
+      usePrefs.getState().updateRecentRoom(roomId, { private: res.private })
+      const message: RoomAccessMessage = { v: 1, kind: 'room-access', private: res.private }
+      void room.localParticipant
+        .sendText(JSON.stringify(message), { topic: TOPIC_ROOM })
+        .catch(() => undefined)
+      toast.success(
+        res.private
+          ? 'Senha salva. Quem entrar a partir de agora vai precisar dela.'
+          : 'A sala agora está aberta, sem senha.',
+      )
+      setPassword('')
+      setOpen(false)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível mudar a senha.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const tooShort = password.length < ROOM_PASSWORD_MIN
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={isPrivate ? 'Senha da sala' : 'Colocar senha na sala'}
+          className={cn(
+            'no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors',
+            isPrivate
+              ? 'bg-accent/20 text-accent-hover hover:bg-accent/30'
+              : 'text-muted hover:bg-surface-2 hover:text-fg',
+          )}
+        >
+          {isPrivate ? <Lock className="size-3.5" /> : <LockOpen className="size-3.5" />}
+          {isPrivate ? 'Privada' : 'Aberta'}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[360px] p-5">
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (!tooShort) void save(password)
+          }}
+        >
+          <div className="flex items-start gap-3">
+            <span className="bg-accent/20 text-accent-hover flex size-9 shrink-0 items-center justify-center rounded-lg">
+              <Lock className="size-4" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold">Senha da sala</p>
+              <p className="text-muted mt-1 text-xs leading-relaxed">
+                Só você, que criou a sala, pode {isPrivate ? 'trocar ou tirar' : 'colocar'} a senha.
+                Quem já está dentro continua na sala.
+              </p>
+            </div>
+          </div>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium">{isPrivate ? 'Nova senha' : 'Senha'}</span>
+            <Input
+              type="password"
+              value={password}
+              maxLength={ROOM_PASSWORD_MAX}
+              placeholder={`Mínimo de ${ROOM_PASSWORD_MIN} caracteres`}
+              onChange={(e) => setPassword(e.target.value)}
+              autoFocus
+            />
+          </label>
+          <Button type="submit" variant="primary" disabled={busy || tooShort}>
+            {isPrivate ? 'Salvar nova senha' : 'Tornar a sala privada'}
+          </Button>
+          {isPrivate && (
+            <Button
+              type="button"
+              variant="outline"
+              className="text-danger"
+              disabled={busy}
+              onClick={() => void save(null)}
+            >
+              <LockOpen /> Tirar a senha (sala aberta)
+            </Button>
+          )}
+        </form>
+      </PopoverContent>
+    </Popover>
+  )
 }

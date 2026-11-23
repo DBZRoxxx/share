@@ -3,7 +3,6 @@ import {
   useConnectionQualityIndicator,
   useLocalParticipant,
 } from '@livekit/components-react'
-import { formatRoomId } from '@share/shared'
 import { CHAT_SYNC_MAX, parseChatHistory, type ChatEnvelope } from '@share/shared/chat'
 import type { ResumeState } from '@shared/ipc'
 import {
@@ -25,8 +24,8 @@ import { Tooltip } from '@/components/ui/primitives'
 import { copyInvite } from '@/lib/invite'
 import { CAMERA_CAPTURE, cameraPublishOptions, MIC_CAPTURE, ROOM_OPTIONS } from '@/lib/media'
 import { setChatAuth } from '@/lib/chat-api'
-import { fetchToken } from '@/lib/token'
-import { useNav } from '@/stores/nav'
+import { fetchToken, TokenError } from '@/lib/token'
+import { useNav, type JoinOptions } from '@/stores/nav'
 import { usePrefs } from '@/stores/prefs'
 import { useSettingsUi } from '@/stores/settings-ui'
 import { setResumeProvider } from '@/stores/update'
@@ -40,7 +39,7 @@ import { ScreenShareController } from '@/room/screen-share'
 import { SidePanel } from '@/room/side-panel'
 import { useChatTransport } from '@/room/use-chat'
 import { useChat } from '@/room/chat-store'
-import { RoomTitle, useRoomInfo, useRoomNameSync } from '@/room/room-name'
+import { RoomAccess, RoomTitle, useRoomInfo, useRoomNameSync } from '@/room/room-name'
 import { Stage } from '@/room/stage'
 
 type Status =
@@ -111,6 +110,7 @@ function useResumeProvider(roomId: string, room: Room, controller: ScreenShareCo
           spotlightKey: ui.spotlightKey,
           // The chat is cached locally and on the server.
           chat: [],
+          roomKey: useRoomInfo.getState().roomKey,
         }
         // Tell the others before the connection drops (best effort, short wait).
         await Promise.race([
@@ -141,13 +141,12 @@ function disconnectMessage(reason: DisconnectReason | undefined): string | null 
 export function RoomScreen({
   roomId,
   resume,
-  roomName,
+  create,
+  roomKey,
 }: {
   roomId: string
   resume?: ResumeState
-  /** Name for a room being created. */
-  roomName?: string
-}) {
+} & Pick<JoinOptions, 'create' | 'roomKey'>) {
   const goHome = useNav((s) => s.goHome)
   // Only the first connection attempt restores the pre-update state.
   const [initialResume] = useState(() => resume ?? null)
@@ -161,8 +160,12 @@ export function RoomScreen({
     useRoomUi.getState().reset()
     useChat.getState().reset()
     // Show the name we already know right away; the server's answer follows.
+    const known = usePrefs.getState().recentRooms.find((r) => r.id === roomId)
     useRoomInfo.setState({
-      name: roomName ?? usePrefs.getState().recentRooms.find((r) => r.id === roomId)?.name ?? null,
+      name: create?.name ?? known?.name ?? null,
+      private: !!create?.password || !!known?.private,
+      owner: !!create || !!known?.ownerKey,
+      roomKey: roomKey ?? resume?.roomKey ?? null,
     })
     const chatSeed = resume ? restoreChat(resume.chat) : []
     if (resume) {
@@ -185,14 +188,46 @@ export function RoomScreen({
 
     void (async () => {
       try {
-        const request = { roomId, name: prefs.name, identity: prefs.identity, roomName }
-        const { token, url, roomName: storedName } = await fetchToken(request)
+        const sessionKey = roomKey ?? resume?.roomKey ?? known?.roomKey ?? undefined
+        const request = {
+          roomId,
+          name: prefs.name,
+          identity: prefs.identity,
+          roomName: create?.name,
+          create: create ? true : undefined,
+          password: create?.password,
+          roomKey: sessionKey,
+          ownerKey: known?.ownerKey ?? undefined,
+        }
+        const res = await fetchToken(request)
         if (cancelled) return
-        setChatAuth({ roomId, token, refresh: async () => (await fetchToken(request)).token })
-        await room.connect(url, token)
+        // Later refreshes (token expiry) prove access with the keys, not the password.
+        const refreshRequest = {
+          roomId,
+          name: prefs.name,
+          identity: prefs.identity,
+          roomKey: res.roomKey ?? sessionKey,
+          ownerKey: res.ownerKey ?? known?.ownerKey ?? undefined,
+        }
+        setChatAuth({
+          roomId,
+          token: res.token,
+          refresh: async () => (await fetchToken(refreshRequest)).token,
+        })
+        await room.connect(res.url, res.token)
         if (cancelled) return
-        prefs.addRecentRoom(roomId, storedName)
-        if (storedName !== undefined) useRoomInfo.setState({ name: storedName })
+        prefs.addRecentRoom(roomId, {
+          name: res.roomName,
+          private: res.private,
+          createdByMe: res.owner ? true : undefined,
+          ownerKey: res.ownerKey ?? undefined,
+        })
+        useRoomInfo.setState({
+          ...(res.roomName !== undefined ? { name: res.roomName } : {}),
+          private: !!res.private,
+          owner: !!res.owner,
+          roomKey: res.private && !res.owner ? (res.roomKey ?? null) : null,
+        })
         setStatus({ state: 'connected', room, controller, chatSeed })
 
         const withMic = resume ? resume.mic : prefs.joinWithMic
@@ -214,6 +249,12 @@ export function RoomScreen({
         if (resume?.screen) void resumeScreenShare(controller, resume.screen)
       } catch (error) {
         if (cancelled) return
+        // Private room without (valid) access: ask for the password.
+        if (error instanceof TokenError && error.code?.startsWith('password_')) {
+          usePrefs.getState().updateRecentRoom(roomId, { roomKey: null, private: true })
+          useNav.getState().goPrejoin(roomId, { error: error.message })
+          return
+        }
         console.error('[room] connect failed', error)
         setStatus({
           state: 'error',
@@ -228,7 +269,7 @@ export function RoomScreen({
       controller.dispose()
       void room.disconnect()
     }
-  }, [roomId, attempt, initialResume, roomName])
+  }, [roomId, attempt, initialResume, create, roomKey])
 
   if (status.state === 'connected') {
     return (
@@ -250,7 +291,7 @@ export function RoomScreen({
         {status.state === 'connecting' ? (
           <>
             <Loader2 className="text-accent size-8 animate-spin" />
-            <p className="text-muted">Entrando na sala {formatRoomId(roomId)}…</p>
+            <p className="text-muted">Entrando na sala…</p>
           </>
         ) : (
           <>
@@ -325,18 +366,17 @@ function ConnectedRoom({
     <div className="flex h-full flex-col">
       <TitleBar>
         <RoomTitle room={room} roomId={roomId} />
-        <div className="no-drag bg-surface-2 flex shrink-0 items-center gap-1 rounded-lg py-0.5 pr-0.5 pl-2.5">
-          <span className="text-muted font-mono text-xs">{formatRoomId(roomId)}</span>
-          <Tooltip content="Copiar link de convite" side="bottom">
-            <button
-              type="button"
-              onClick={invite}
-              className="hover:bg-surface-3 flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium"
-            >
-              <Copy className="size-3.5" /> Convidar
-            </button>
-          </Tooltip>
-        </div>
+        <RoomAccess room={room} roomId={roomId} />
+        <Tooltip content="Copiar link de convite" side="bottom">
+          <button
+            type="button"
+            onClick={invite}
+            data-room-id={roomId}
+            className="no-drag bg-surface-2 hover:bg-surface-3 flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium"
+          >
+            <Copy className="size-3.5" /> Convidar
+          </button>
+        </Tooltip>
         <ConnectionIndicator />
       </TitleBar>
 

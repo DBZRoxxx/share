@@ -8,6 +8,7 @@ import { getRedis } from '@/lib/chat-db'
 import { corsHeaders, jsonResponse, rateLimited } from '@/lib/http'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { verifyRoomToken } from '@/lib/room-auth'
+import { getRoomAccess } from '@/lib/room-access'
 import { getRoomName, setRoomName } from '@/lib/room-store'
 
 export const runtime = 'nodejs'
@@ -32,7 +33,9 @@ export async function GET(request: Request, { params }: Params) {
   const { room } = await params
   if (!isRoomId(room)) return json<ErrorResponse>({ error: 'Sala inválida' }, 400)
   const redis = getRedis()
-  return json<RoomInfoResponse>({ name: redis ? await getRoomName(redis, room) : null })
+  if (!redis) return json<RoomInfoResponse>({ name: null, private: false })
+  const [name, { auth }] = await Promise.all([getRoomName(redis, room), getRoomAccess(redis, room)])
+  return json<RoomInfoResponse>({ name, private: !!auth })
 }
 
 /** Renames the room (anyone in it can). An empty name removes it. */
@@ -56,5 +59,6 @@ export async function PUT(request: Request, { params }: Params) {
   }
   const name = parsed.data.name || null
   await setRoomName(redis, caller.roomId, name)
-  return json<RoomInfoResponse>({ name })
+  const { auth } = await getRoomAccess(redis, caller.roomId)
+  return json<RoomInfoResponse>({ name, private: !!auth })
 }

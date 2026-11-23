@@ -1,4 +1,3 @@
-import { formatRoomId } from '@share/shared/room'
 import { app, Menu, nativeImage, screen, Tray, type BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipc'
 
@@ -64,7 +63,7 @@ export class AppTray {
     const inRoom = this.roomId !== null
     this.tray.setToolTip(
       inRoom
-        ? `Share — na sala ${this.roomName ?? formatRoomId(this.roomId!)}`.slice(0, 127)
+        ? (this.roomName ? `Share — na sala ${this.roomName}` : 'Share — em uma sala').slice(0, 127)
         : 'Share',
     )
     this.tray.setContextMenu(
