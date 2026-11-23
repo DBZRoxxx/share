@@ -9,8 +9,9 @@ App desktop para Windows para compartilhar a tela (Full HD, com áudio) e abrir 
 - Lista de quem está na sala, volume individual por tela/pessoa, estatísticas de vídeo
 - **Chat da sala** com emojis (busca em português), GIFs, prints (cole com `Ctrl+V`) e arquivos de até 100 MB; reações, respostas citando a mensagem, editar e apagar. O histórico e os anexos ficam guardados por 7 dias depois da última mensagem, mesmo com a sala vazia
 - **Fechar não sai da sala**: o Share continua rodando na bandeja do Windows (perto do relógio), com câmera e tela no ar
+- **Salas com nome** (até 45 caracteres), definido ao criar e editável por quem está na sala — todos veem a mudança na hora; o nome aparece também nas salas recentes e na página do convite
 - Link de convite que abre direto no app (`share://`), instalador sem pedir admin
-- **Atualização sem sair da sala**: atualizações só de interface são aplicadas sem reiniciar (a tela recarrega e você volta para a sala em ~2 s, com câmera, mic, tela e chat); as completas reiniciam e também voltam sozinhas para a sala. Dá para adiar para quando sair da sala.
+- **Atualização sem sair da sala**: atualizações só de interface são aplicadas sem reiniciar (a tela recarrega e você volta para a sala em ~2 s, com câmera, mic, tela e chat); as completas reiniciam e também voltam sozinhas para a sala. Dá para adiar para quando sair da sala. O app procura versões novas ao abrir, a cada 30 min e sempre que você volta para a janela (ex.: pela bandeja); o botão ⟳ no topo procura na hora.
 
 ## Arquitetura
 
@@ -79,7 +80,7 @@ Atalhos na sala: `Ctrl+Shift+S` compartilhar/parar tela · `Ctrl+Shift+V` câmer
 - **Windows 10 (build < 20348)** não suporta captura de áudio por processo. Lá o app cai para o áudio do sistema inteiro, que inclui as vozes da chamada/Discord (eco para os outros). O seletor de tela avisa quando isso acontece.
 - **Compartilhar a tela inteira** envia todo o som do PC exceto o Share — inclusive o Discord, se a voz estiver lá. Para não vazar, compartilhe a **janela** do jogo/app.
 - **Builds no Git Bash**: o Vite enxerga o drive como `d:` e `D:` e duplica módulos (renderer maior e hash de shell diferente). Gere instaladores/pacotes pelo PowerShell (o CI já faz assim).
-- **Atualização rápida x completa:** o processo principal importa `@share/shared` (o índice do pacote) e empacota tudo o que ele exporta. Mudar esse índice ou `packages/shared/src/chat.ts` muda o hash de shell e transforma a release numa atualização completa. O protocolo novo do chat fica em `@share/shared/chat` (`chat-protocol.ts`) justamente por isso.
+- **Atualização rápida x completa:** tudo o que o processo principal (`src/main`) e o preload importam entra no hash de shell; mudar qualquer coisa ali transforma a release numa atualização completa. Por isso o main importa só `@share/shared/room` (`room.ts`) — mexer nesse arquivo também conta. Desde a v0.4 o resto de `packages/shared` pode mudar à vontade.
 - **`next build` com Turbopack falha no Windows** (`ModuleGraph::from_graphs_inner was canceled`); na Vercel (Linux) funciona. Para testar o build localmente use `npx next build --webpack`.
 - Para testar atualizações localmente, aponte o app para uma pasta com `hot.json` + `.asar`: `$env:SHARE_UPDATE_FEED="C:\pasta\release-hot"` antes de abrir o `Share.exe` de `release/win-unpacked`.
 - Rodando a partir do terminal de extensões do VS Code, a variável `ELECTRON_RUN_AS_NODE=1` pode estar definida e faz o Electron abrir como Node puro. Rode `unset ELECTRON_RUN_AS_NODE` (bash) antes de `npm run dev:desktop`.

@@ -1,7 +1,7 @@
-import { Clock, Download, Loader2, RotateCw, Zap } from 'lucide-react'
+import { Clock, Download, Loader2, RefreshCw, RotateCw, Zap } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import { applyUpdate, useUpdate } from '@/stores/update'
+import { applyUpdate, checkForUpdates, useUpdate } from '@/stores/update'
 import { Button } from './ui/button'
 import { Logo } from './logo'
 import { Popover, PopoverContent, PopoverTrigger, Tooltip } from './ui/primitives'
@@ -24,7 +24,32 @@ export function TitleBar({ children, className }: { children?: ReactNode; classN
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-3">{children}</div>
       <UpdatePill />
+      <CheckUpdatesButton />
     </header>
+  )
+}
+
+/** Manual check, for when the app has been sitting in the tray. */
+function CheckUpdatesButton() {
+  const status = useUpdate((s) => s.status)
+  const checking = useUpdate((s) => s.checking)
+  // While downloading or ready, the pill next to it says everything.
+  if (status.state !== 'idle' && status.state !== 'checking' && status.state !== 'error') {
+    return null
+  }
+  const busy = checking || status.state === 'checking'
+  return (
+    <Tooltip content={busy ? 'Procurando atualizações…' : 'Verificar atualizações'} side="bottom">
+      <button
+        type="button"
+        aria-label="Verificar atualizações"
+        disabled={busy}
+        onClick={() => void checkForUpdates()}
+        className="no-drag text-muted hover:bg-surface-2 hover:text-fg flex size-7 items-center justify-center rounded-md transition-colors disabled:opacity-70"
+      >
+        <RefreshCw className={cn('size-4', busy && 'animate-spin')} />
+      </button>
+    </Tooltip>
   )
 }
 

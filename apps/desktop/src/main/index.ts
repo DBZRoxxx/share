@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { PROTOCOL } from '@share/shared'
+import { PROTOCOL } from '@share/shared/room'
 import { app, BrowserWindow, ipcMain, nativeTheme, screen, session, shell } from 'electron'
 import icon from '../../resources/icon.png?asset'
 import { IPC, type AppInfo } from '../shared/ipc'
@@ -9,7 +9,13 @@ import { activeRendererEntry, cleanupHotBundles, currentVersion, markActiveBad }
 import { consumeResume } from './resume'
 import { getSettings, updateSettings } from './settings'
 import { AppTray } from './tray'
-import { applyUpdate, getUpdateStatus, setupAutoUpdates } from './updater'
+import {
+  applyUpdate,
+  checkForUpdates,
+  checkIfStale,
+  getUpdateStatus,
+  setupAutoUpdates,
+} from './updater'
 
 // ---------------------------------------------------------------------------
 // Dev helpers: `--multi-instance --profile=2` runs a second, isolated client on
@@ -107,6 +113,9 @@ function createWindow() {
   mainWindow = win
 
   win.once('ready-to-show', () => win.show())
+  // The app lives in the tray for days: look for updates when the user comes back to it.
+  win.on('show', checkIfStale)
+  win.on('focus', checkIfStale)
 
   // Closing hides to the notification area so a call keeps going.
   win.on('close', (event) => {
@@ -247,8 +256,11 @@ function registerIpc() {
     return url
   })
   ipcMain.handle(IPC.showWindow, () => showMainWindow())
-  ipcMain.handle(IPC.setRoom, (_e, roomId: unknown) => {
-    tray.setRoom(typeof roomId === 'string' && roomId ? roomId : null)
+  ipcMain.handle(IPC.setRoom, (_e, roomId: unknown, name: unknown) => {
+    tray.setRoom(
+      typeof roomId === 'string' && roomId ? roomId : null,
+      typeof name === 'string' && name ? name.slice(0, 64) : null,
+    )
   })
   ipcMain.handle(IPC.rendererReady, (event) => {
     if (event.sender === mainWindow?.webContents) clearWatchdog()
@@ -261,6 +273,7 @@ function registerIpc() {
 
   ipcMain.handle(IPC.updateGetStatus, () => getUpdateStatus())
   ipcMain.handle(IPC.updateApply, (_e, resume: unknown) => applyUpdate(resume))
+  ipcMain.handle(IPC.updateCheck, () => checkForUpdates())
 }
 
 function onReady() {

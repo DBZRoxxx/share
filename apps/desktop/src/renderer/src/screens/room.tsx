@@ -39,6 +39,7 @@ import { SettingsDialog } from '@/room/settings-dialog'
 import { SidePanel } from '@/room/side-panel'
 import { useChatTransport } from '@/room/use-chat'
 import { useChat } from '@/room/chat-store'
+import { RoomTitle, useRoomInfo, useRoomNameSync } from '@/room/room-name'
 import { Stage } from '@/room/stage'
 
 type Status =
@@ -136,7 +137,16 @@ function disconnectMessage(reason: DisconnectReason | undefined): string | null 
   }
 }
 
-export function RoomScreen({ roomId, resume }: { roomId: string; resume?: ResumeState }) {
+export function RoomScreen({
+  roomId,
+  resume,
+  roomName,
+}: {
+  roomId: string
+  resume?: ResumeState
+  /** Name for a room being created. */
+  roomName?: string
+}) {
   const goHome = useNav((s) => s.goHome)
   // Only the first connection attempt restores the pre-update state.
   const [initialResume] = useState(() => resume ?? null)
@@ -149,6 +159,10 @@ export function RoomScreen({ roomId, resume }: { roomId: string; resume?: Resume
     const resume = attempt === 0 ? initialResume : null
     useRoomUi.getState().reset()
     useChat.getState().reset()
+    // Show the name we already know right away; the server's answer follows.
+    useRoomInfo.setState({
+      name: roomName ?? usePrefs.getState().recentRooms.find((r) => r.id === roomId)?.name ?? null,
+    })
     const chatSeed = resume ? restoreChat(resume.chat) : []
     if (resume) {
       useRoomUi.setState({ layout: resume.layout, spotlightKey: resume.spotlightKey })
@@ -170,13 +184,14 @@ export function RoomScreen({ roomId, resume }: { roomId: string; resume?: Resume
 
     void (async () => {
       try {
-        const request = { roomId, name: prefs.name, identity: prefs.identity }
-        const { token, url } = await fetchToken(request)
+        const request = { roomId, name: prefs.name, identity: prefs.identity, roomName }
+        const { token, url, roomName: storedName } = await fetchToken(request)
         if (cancelled) return
         setChatAuth({ roomId, token, refresh: async () => (await fetchToken(request)).token })
         await room.connect(url, token)
         if (cancelled) return
-        prefs.addRecentRoom(roomId)
+        prefs.addRecentRoom(roomId, storedName)
+        if (storedName !== undefined) useRoomInfo.setState({ name: storedName })
         setStatus({ state: 'connected', room, controller, chatSeed })
 
         const withMic = resume ? resume.mic : prefs.joinWithMic
@@ -212,7 +227,7 @@ export function RoomScreen({ roomId, resume }: { roomId: string; resume?: Resume
       controller.dispose()
       void room.disconnect()
     }
-  }, [roomId, attempt, initialResume])
+  }, [roomId, attempt, initialResume, roomName])
 
   if (status.state === 'connected') {
     return (
@@ -282,11 +297,13 @@ function ConnectedRoom({
   useShortcuts(controller)
   useChatTransport(room, roomId, chatSeed)
   useResumeProvider(roomId, room, controller)
+  useRoomNameSync(room, roomId)
+  const roomName = useRoomInfo((s) => s.name)
 
   useEffect(() => {
-    void window.share.app.setRoom(roomId)
-    return () => void window.share.app.setRoom(null)
-  }, [roomId])
+    void window.share.app.setRoom(roomId, roomName)
+  }, [roomId, roomName])
+  useEffect(() => () => void window.share.app.setRoom(null), [])
 
   useEffect(() => {
     const onReconnecting = () => setReconnecting(true)
@@ -300,7 +317,8 @@ function ConnectedRoom({
   return (
     <div className="flex h-full flex-col">
       <TitleBar>
-        <div className="no-drag bg-surface-2 flex items-center gap-1 rounded-lg py-0.5 pr-0.5 pl-2.5">
+        <RoomTitle room={room} roomId={roomId} />
+        <div className="no-drag bg-surface-2 flex shrink-0 items-center gap-1 rounded-lg py-0.5 pr-0.5 pl-2.5">
           <span className="text-muted font-mono text-xs">{formatRoomId(roomId)}</span>
           <Tooltip content="Copiar link de convite" side="bottom">
             <button

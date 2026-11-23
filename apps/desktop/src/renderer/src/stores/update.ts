@@ -10,6 +10,8 @@ interface UpdateState {
   scheduled: boolean
   /** A room screen is mounted (updates offer to bring the user back to it). */
   inRoom: boolean
+  /** A check the user started is running. */
+  checking: boolean
   setScheduled: (scheduled: boolean) => void
 }
 
@@ -17,6 +19,7 @@ export const useUpdate = create<UpdateState>()((set) => ({
   status: { state: 'idle' },
   scheduled: false,
   inRoom: false,
+  checking: false,
   setScheduled: (scheduled) => set({ scheduled }),
 }))
 
@@ -78,4 +81,50 @@ export function initUpdates(): () => void {
   }
   void window.share.updater.getStatus().then(onStatus)
   return window.share.updater.onStatus(onStatus)
+}
+
+/**
+ * "Verificar atualizações": asks the main process to check right now and
+ * reports the outcome. Downloads and the "Atualizar" button follow through
+ * the usual status updates.
+ */
+export async function checkForUpdates(): Promise<void> {
+  if (useUpdate.getState().checking) return
+  // Apps installed before v0.4 have no manual check in their preload.
+  const check = window.share.updater.check as
+    (() => ReturnType<typeof window.share.updater.check>) | undefined
+  if (!check) {
+    toast('Reinicie o app para procurar atualizações.')
+    return
+  }
+  useUpdate.setState({ checking: true })
+  try {
+    const result = await check()
+    switch (result.outcome) {
+      case 'up-to-date':
+        toast.success('Você já está na versão mais recente', {
+          description: `Share ${result.version}`,
+        })
+        break
+      case 'available':
+        // The title bar shows the download and then "Atualizar".
+        toast(`Versão ${result.version} encontrada`, {
+          description: 'Baixando… o botão Atualizar aparece no topo quando estiver pronta.',
+        })
+        break
+      case 'unsupported':
+        toast('Atualizações só funcionam no app instalado.')
+        break
+      case 'error':
+        toast.error('Não foi possível procurar atualizações', {
+          description: 'Verifique sua internet e tente de novo.',
+        })
+        break
+    }
+  } catch (error) {
+    console.error('[update] manual check failed', error)
+    toast.error('Não foi possível procurar atualizações')
+  } finally {
+    useUpdate.setState({ checking: false })
+  }
 }

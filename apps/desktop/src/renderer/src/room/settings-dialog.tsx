@@ -1,6 +1,7 @@
 import { useLocalParticipant, useRoomContext } from '@livekit/components-react'
 import { DISPLAY_NAME_MAX } from '@share/shared'
 import type { MainSettings } from '@shared/ipc'
+import { RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -8,6 +9,7 @@ import { Dialog, DialogContent, Field, Input, Select, Switch } from '@/component
 import { useDevices } from '@/lib/devices'
 import { CODEC_LABELS } from '@/lib/media'
 import { usePrefs, type PreferredCodec } from '@/stores/prefs'
+import { checkForUpdates, useUpdate } from '@/stores/update'
 import { useRoomUi } from './room-ui'
 
 export function SettingsDialog() {
@@ -146,6 +148,7 @@ function SettingsBody() {
 function AppSection() {
   const [settings, setSettings] = useState<MainSettings | null>(null)
   const [version, setVersion] = useState<string | null>(null)
+  const checking = useUpdate((u) => u.checking)
 
   useEffect(() => {
     let alive = true
@@ -165,7 +168,17 @@ function AppSection() {
         checked={settings?.closeToTray ?? true}
         onChange={(v) => void window.share.settings.set({ closeToTray: v }).then(setSettings)}
       />
-      {version && <p className="text-muted text-xs">Share versão {version}</p>}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-muted text-xs">{version ? `Share versão ${version}` : ''}</p>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={checking}
+          onClick={() => void checkForUpdates()}
+        >
+          <RefreshCw className={checking ? 'animate-spin' : ''} /> Verificar atualizações
+        </Button>
+      </div>
     </section>
   )
 }

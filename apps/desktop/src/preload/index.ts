@@ -18,7 +18,7 @@ const api: ShareApi = {
     info: () => ipcRenderer.invoke(IPC.appInfo),
     openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
     show: () => ipcRenderer.invoke(IPC.showWindow),
-    setRoom: (roomId) => ipcRenderer.invoke(IPC.setRoom, roomId),
+    setRoom: (roomId, name) => ipcRenderer.invoke(IPC.setRoom, roomId, name ?? null),
     rendererReady: () => ipcRenderer.invoke(IPC.rendererReady),
     consumeResume: () => ipcRenderer.invoke(IPC.consumeResume),
     onLeaveRoomRequest: (callback) => subscribe<void>(IPC.trayLeaveRoom, callback),
@@ -42,6 +42,7 @@ const api: ShareApi = {
     getStatus: () => ipcRenderer.invoke(IPC.updateGetStatus),
     onStatus: (callback) => subscribe<UpdateStatus>(IPC.updateStatus, callback),
     apply: (resume) => ipcRenderer.invoke(IPC.updateApply, resume),
+    check: () => ipcRenderer.invoke(IPC.updateCheck),
   },
 }
 

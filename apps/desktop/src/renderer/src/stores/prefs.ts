@@ -7,6 +7,8 @@ export type PreferredCodec = 'h264' | 'vp9' | 'vp8' | 'av1'
 export interface RecentRoom {
   id: string
   lastJoinedAt: number
+  /** Custom room name, when it has one. */
+  name?: string | null
 }
 
 interface PrefsState {
@@ -24,8 +26,14 @@ interface PrefsState {
   videoCodec: PreferredCodec
   showStats: boolean
   showOwnScreen: boolean
-  set: (partial: Partial<Omit<PrefsState, 'set' | 'addRecentRoom' | 'removeRecentRoom'>>) => void
-  addRecentRoom: (id: string) => void
+  set: (
+    partial: Partial<
+      Omit<PrefsState, 'set' | 'addRecentRoom' | 'removeRecentRoom' | 'nameRecentRoom'>
+    >,
+  ) => void
+  /** `name`: undefined keeps the one already known. */
+  addRecentRoom: (id: string, name?: string | null) => void
+  nameRecentRoom: (id: string, name: string | null) => void
   removeRecentRoom: (id: string) => void
 }
 
@@ -48,12 +56,19 @@ export const usePrefs = create<PrefsState>()(
       showStats: false,
       showOwnScreen: true,
       set: (partial) => set(partial),
-      addRecentRoom: (id) =>
+      addRecentRoom: (id, name) =>
+        set((s) => {
+          const known = s.recentRooms.find((r) => r.id === id)
+          return {
+            recentRooms: [
+              { id, lastJoinedAt: Date.now(), name: name === undefined ? known?.name : name },
+              ...s.recentRooms.filter((r) => r.id !== id),
+            ].slice(0, MAX_RECENT),
+          }
+        }),
+      nameRecentRoom: (id, name) =>
         set((s) => ({
-          recentRooms: [
-            { id, lastJoinedAt: Date.now() },
-            ...s.recentRooms.filter((r) => r.id !== id),
-          ].slice(0, MAX_RECENT),
+          recentRooms: s.recentRooms.map((r) => (r.id === id ? { ...r, name } : r)),
         })),
       removeRecentRoom: (id) =>
         set((s) => ({ recentRooms: s.recentRooms.filter((r) => r.id !== id) })),

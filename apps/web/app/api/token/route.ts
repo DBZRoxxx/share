@@ -1,7 +1,9 @@
 import { tokenRequestSchema, type ErrorResponse, type TokenResponse } from '@share/shared'
 import { AccessToken } from 'livekit-server-sdk'
+import { getRedis } from '@/lib/chat-db'
 import { corsHeaders, jsonResponse, rateLimited } from '@/lib/http'
 import { createRateLimiter } from '@/lib/rate-limit'
+import { claimRoomName } from '@/lib/room-store'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -41,7 +43,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const { roomId, name, identity } = parsed.data
+  const { roomId, name, identity, roomName } = parsed.data
   const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity,
     name,
@@ -56,5 +58,14 @@ export async function POST(request: Request) {
     canUpdateOwnMetadata: true,
   })
 
-  return json<TokenResponse>({ token: await at.toJwt(), url: LIVEKIT_URL })
+  // The room name is a nicety: never fail a join because storage is down.
+  const redis = getRedis()
+  const storedName = redis
+    ? await claimRoomName(redis, roomId, roomName || undefined).catch((error: unknown) => {
+        console.error('room name unavailable', error)
+        return null
+      })
+    : null
+
+  return json<TokenResponse>({ token: await at.toJwt(), url: LIVEKIT_URL, roomName: storedName })
 }

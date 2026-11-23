@@ -1,4 +1,4 @@
-import type { ErrorResponse } from '@share/shared'
+import type { ErrorResponse, RoomInfoResponse } from '@share/shared'
 import type {
   ChatEvent,
   ChatEventsResponse,
@@ -50,7 +50,7 @@ async function request<T>(roomId: string, path: string, init: RequestInit = {}):
   for (let attempt = 0; ; attempt++) {
     let res: Response
     try {
-      res = await fetch(`${WEB_URL}/api/chat/${roomId}${path}`, {
+      res = await fetch(`${WEB_URL}${path}`, {
         ...init,
         headers: {
           ...(init.body ? { 'Content-Type': 'application/json' } : {}),
@@ -76,16 +76,18 @@ async function request<T>(roomId: string, path: string, init: RequestInit = {}):
 
 export const chatApi = {
   events: (roomId: string, after: number) =>
-    request<ChatEventsResponse>(roomId, `/events?after=${after}`),
+    request<ChatEventsResponse>(roomId, `/api/chat/${roomId}/events?after=${after}`),
 
   post: (roomId: string, events: ChatEvent[]) =>
-    request<ChatPostResponse>(roomId, '/events', {
+    request<ChatPostResponse>(roomId, `/api/chat/${roomId}/events`, {
       method: 'POST',
       body: JSON.stringify({ events }),
     }),
 
   fileUrl: (roomId: string, fileId: string) =>
-    request<ChatFileUrlResponse>(roomId, `/files/${fileId}`, { method: 'POST' }),
+    request<ChatFileUrlResponse>(roomId, `/api/chat/${roomId}/files/${fileId}`, {
+      method: 'POST',
+    }),
 
   /** Uploads straight to the private Blob store; the API only signs the upload. */
   async upload(
@@ -118,4 +120,26 @@ export const chatApi = {
       return { pathname: (await run(token)).pathname }
     }
   },
+}
+
+export const roomApi = {
+  /** Public: the name shown before joining. Never throws. */
+  async name(roomId: string): Promise<string | null> {
+    if (!WEB_URL) return null
+    try {
+      const res = await fetch(`${WEB_URL}/api/rooms/${roomId}`, {
+        signal: AbortSignal.timeout(8000),
+      })
+      if (!res.ok) return null
+      return ((await res.json()) as RoomInfoResponse).name
+    } catch {
+      return null
+    }
+  },
+
+  rename: (roomId: string, name: string | null) =>
+    request<RoomInfoResponse>(roomId, `/api/rooms/${roomId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    }),
 }

@@ -1,4 +1,11 @@
-import { createRoomId, DISPLAY_NAME_MAX, formatRoomId, parseRoomInput } from '@share/shared'
+import {
+  cleanRoomName,
+  createRoomId,
+  DISPLAY_NAME_MAX,
+  formatRoomId,
+  parseRoomInput,
+  ROOM_NAME_MAX,
+} from '@share/shared'
 import { ArrowRight, Clock, Plus, X } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Logo } from '@/components/logo'
@@ -13,6 +20,7 @@ export function HomeScreen() {
   const { name, recentRooms, set, removeRecentRoom } = usePrefs()
   const goPrejoin = useNav((s) => s.goPrejoin)
   const [draftName, setDraftName] = useState(name)
+  const [roomName, setRoomName] = useState('')
   const [joinInput, setJoinInput] = useState('')
   const [joinError, setJoinError] = useState<string | null>(null)
   const [nameError, setNameError] = useState(false)
@@ -35,7 +43,7 @@ export function HomeScreen() {
 
   const createRoom = () => {
     if (!ensureName()) return
-    goPrejoin(createRoomId())
+    goPrejoin(createRoomId(), cleanRoomName(roomName) || undefined)
   }
 
   const joinRoom = (e: FormEvent) => {
@@ -88,9 +96,28 @@ export function HomeScreen() {
               )}
             </Field>
 
-            <Button variant="primary" size="lg" onClick={createRoom}>
-              <Plus /> Criar sala
-            </Button>
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={(e) => {
+                e.preventDefault()
+                createRoom()
+              }}
+            >
+              <Field label="Nome da sala" hint="Opcional. Dá para mudar depois, dentro da sala.">
+                <Input
+                  value={roomName}
+                  placeholder="Ex.: Noite do CS"
+                  aria-label="Nome da sala (opcional)"
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if ([...cleanRoomName(value)].length <= ROOM_NAME_MAX) setRoomName(value)
+                  }}
+                />
+              </Field>
+              <Button type="submit" variant="primary" size="lg">
+                <Plus /> Criar sala
+              </Button>
+            </form>
 
             <div className="text-muted flex items-center gap-3 text-xs">
               <span className="bg-border h-px flex-1" /> ou entre em uma sala{' '}
@@ -130,8 +157,17 @@ export function HomeScreen() {
                       onClick={() => ensureName() && goPrejoin(r.id)}
                       className="flex flex-1 items-center justify-between gap-3 px-3 py-2.5 text-left"
                     >
-                      <span className="font-mono text-sm">{formatRoomId(r.id)}</span>
-                      <span className="text-muted text-xs">{relativeTime(r.lastJoinedAt)}</span>
+                      <span className="flex min-w-0 flex-col">
+                        {r.name && <span className="truncate text-sm font-medium">{r.name}</span>}
+                        <span
+                          className={r.name ? 'text-muted font-mono text-xs' : 'font-mono text-sm'}
+                        >
+                          {formatRoomId(r.id)}
+                        </span>
+                      </span>
+                      <span className="text-muted shrink-0 text-xs">
+                        {relativeTime(r.lastJoinedAt)}
+                      </span>
                     </button>
                     <button
                       type="button"

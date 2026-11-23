@@ -34,7 +34,7 @@ function useDeepLinks() {
       // Coming back from an update: straight back into the room.
       const resume = await window.share.app.consumeResume()
       if (resume && usePrefs.getState().name.trim()) {
-        useNav.getState().enterRoom(resume.roomId, resume)
+        useNav.getState().enterRoom(resume.roomId, { resume })
       }
       const url = await window.share.deepLink.consumePending()
       if (url) open(url)
@@ -72,9 +72,14 @@ export function App() {
   return (
     <TooltipProvider delayDuration={400}>
       {view.name === 'room' && hasName ? (
-        <RoomScreen key={view.roomId} roomId={view.roomId} resume={view.resume} />
+        <RoomScreen
+          key={view.roomId}
+          roomId={view.roomId}
+          resume={view.resume}
+          roomName={view.roomName}
+        />
       ) : view.name === 'prejoin' || view.name === 'room' ? (
-        <PreJoinScreen key={view.roomId} roomId={view.roomId} />
+        <PreJoinScreen key={view.roomId} roomId={view.roomId} roomName={view.roomName} />
       ) : (
         <HomeScreen />
       )}

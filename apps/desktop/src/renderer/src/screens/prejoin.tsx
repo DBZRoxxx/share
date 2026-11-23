@@ -9,6 +9,7 @@ import { describeMediaError, useDevices } from '@/lib/devices'
 import { copyInvite, roomInviteText } from '@/lib/invite'
 import { CAMERA_CAPTURE, MIC_CAPTURE } from '@/lib/media'
 import { cn, hueFor, initials } from '@/lib/utils'
+import { roomApi } from '@/lib/chat-api'
 import { useNav } from '@/stores/nav'
 import { usePrefs } from '@/stores/prefs'
 import { VideoView } from '@/room/video-view'
@@ -96,9 +97,26 @@ function useMicLevel(enabled: boolean, deviceId: string | null) {
   return { level: enabled ? level : 0, error: enabled ? error : null }
 }
 
-export function PreJoinScreen({ roomId }: { roomId: string }) {
+/** Name to show before joining: the one being created, then what we know, then the server's. */
+function useRoomName(roomId: string, creating: string | undefined) {
+  const known = usePrefs((s) => s.recentRooms.find((r) => r.id === roomId)?.name ?? null)
+  const [fetched, setFetched] = useState<{ roomId: string; name: string | null } | null>(null)
+  useEffect(() => {
+    if (creating) return
+    let alive = true
+    void roomApi.name(roomId).then((name) => alive && setFetched({ roomId, name }))
+    return () => {
+      alive = false
+    }
+  }, [roomId, creating])
+  if (creating) return creating
+  return fetched?.roomId === roomId ? fetched.name : known
+}
+
+export function PreJoinScreen({ roomId, roomName }: { roomId: string; roomName?: string }) {
   const prefs = usePrefs()
   const { goHome, enterRoom } = useNav()
+  const shownName = useRoomName(roomId, roomName)
   const [name, setName] = useState(prefs.name)
   const camera = useCameraPreview(prefs.joinWithCamera, prefs.cameraId)
   const mic = useMicLevel(prefs.joinWithMic, prefs.micId)
@@ -115,7 +133,7 @@ export function PreJoinScreen({ roomId }: { roomId: string }) {
       return
     }
     prefs.set({ name: trimmed })
-    enterRoom(roomId)
+    enterRoom(roomId, { roomName })
   }
 
   const hue = hueFor(prefs.identity)
@@ -217,9 +235,16 @@ export function PreJoinScreen({ roomId }: { roomId: string }) {
           <form onSubmit={submit} className="flex flex-col gap-5">
             <div>
               <p className="text-muted text-sm">Sala</p>
-              <h1 className="font-mono text-3xl font-semibold tracking-tight">
-                {formatRoomId(roomId)}
-              </h1>
+              {shownName ? (
+                <>
+                  <h1 className="text-3xl font-semibold tracking-tight break-words">{shownName}</h1>
+                  <p className="text-muted mt-1 font-mono text-sm">{formatRoomId(roomId)}</p>
+                </>
+              ) : (
+                <h1 className="font-mono text-3xl font-semibold tracking-tight">
+                  {formatRoomId(roomId)}
+                </h1>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">

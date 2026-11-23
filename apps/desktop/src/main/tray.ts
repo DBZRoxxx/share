@@ -1,4 +1,4 @@
-import { formatRoomId } from '@share/shared'
+import { formatRoomId } from '@share/shared/room'
 import { app, Menu, nativeImage, screen, Tray, type BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipc'
 
@@ -9,6 +9,7 @@ import { IPC } from '../shared/ipc'
 export class AppTray {
   private tray: Tray | null = null
   private roomId: string | null = null
+  private roomName: string | null = null
 
   constructor(
     private readonly iconPath: string,
@@ -36,8 +37,9 @@ export class AppTray {
       .resize({ width: size, height: size, quality: 'best' })
   }
 
-  setRoom(roomId: string | null): void {
+  setRoom(roomId: string | null, name: string | null = null): void {
     this.roomId = roomId
+    this.roomName = name
     this.refresh()
   }
 
@@ -60,7 +62,11 @@ export class AppTray {
   private refresh(): void {
     if (!this.tray) return
     const inRoom = this.roomId !== null
-    this.tray.setToolTip(inRoom ? `Share — na sala ${formatRoomId(this.roomId!)}` : 'Share')
+    this.tray.setToolTip(
+      inRoom
+        ? `Share — na sala ${this.roomName ?? formatRoomId(this.roomId!)}`.slice(0, 127)
+        : 'Share',
+    )
     this.tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: 'Abrir Share', click: this.showWindow },

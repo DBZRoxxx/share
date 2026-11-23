@@ -45,10 +45,20 @@ export type UpdateKind = 'hot' | 'full'
 
 export type UpdateStatus =
   | { state: 'idle' }
+  /** Looking for a new version (only reported for checks the user started). */
+  | { state: 'checking' }
   | { state: 'downloading'; kind: UpdateKind; version: string; percent: number | null }
   | { state: 'ready'; kind: UpdateKind; version: string }
   | { state: 'applying'; kind: UpdateKind }
   | { state: 'error'; message: string }
+
+/** Outcome of a check the user asked for ("Verificar atualizações"). */
+export type UpdateCheckResult =
+  | { outcome: 'available'; version: string }
+  | { outcome: 'up-to-date'; version: string }
+  /** Development builds don't update. */
+  | { outcome: 'unsupported' }
+  | { outcome: 'error'; message: string }
 
 /**
  * What the renderer needs to put the user back where they were after an
@@ -96,7 +106,7 @@ export interface ShareApi {
     /** Brings the main window back (e.g. from the notification area). */
     show(): Promise<void>
     /** Tells the main process which room the user is in (tray menu/tooltip). */
-    setRoom(roomId: string | null): Promise<void>
+    setRoom(roomId: string | null, name?: string | null): Promise<void>
     /** Called once the interface has mounted; guards against a broken update. */
     rendererReady(): Promise<void>
     /** Returns (and clears) the state saved before an update reloaded the app. */
@@ -125,6 +135,8 @@ export interface ShareApi {
   updater: {
     getStatus(): Promise<UpdateStatus>
     onStatus(callback: (status: UpdateStatus) => void): () => void
+    /** Looks for a new version right now. */
+    check(): Promise<UpdateCheckResult>
     /** Applies the ready update; `resume` puts the user back in the room afterwards. */
     apply(resume: ResumeState | null): Promise<void>
   }
@@ -151,4 +163,5 @@ export const IPC = {
   updateStatus: 'updater:status',
   updateGetStatus: 'updater:get-status',
   updateApply: 'updater:apply',
+  updateCheck: 'updater:check',
 } as const
