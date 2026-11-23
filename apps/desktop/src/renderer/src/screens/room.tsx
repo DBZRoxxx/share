@@ -3,7 +3,8 @@ import {
   useConnectionQualityIndicator,
   useLocalParticipant,
 } from '@livekit/components-react'
-import { CHAT_SYNC_MAX, formatRoomId, parseChatHistory, type ChatMessage } from '@share/shared'
+import { formatRoomId } from '@share/shared'
+import { CHAT_SYNC_MAX, parseChatHistory, type ChatEnvelope } from '@share/shared/chat'
 import type { ResumeState } from '@shared/ipc'
 import {
   ConnectionQuality,
@@ -23,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/primitives'
 import { copyInvite } from '@/lib/invite'
 import { CAMERA_CAPTURE, cameraPublishOptions, MIC_CAPTURE, ROOM_OPTIONS } from '@/lib/media'
+import { setChatAuth } from '@/lib/chat-api'
 import { fetchToken } from '@/lib/token'
 import { useNav } from '@/stores/nav'
 import { usePrefs } from '@/stores/prefs'
@@ -41,7 +43,7 @@ import { Stage } from '@/room/stage'
 
 type Status =
   | { state: 'connecting' }
-  | { state: 'connected'; room: Room; controller: ScreenShareController }
+  | { state: 'connected'; room: Room; controller: ScreenShareController; chatSeed: ChatEnvelope[] }
   | { state: 'error'; message: string }
   | { state: 'disconnected'; message: string }
 
@@ -49,9 +51,14 @@ type Status =
 const ATTR_STATUS = 'share.status'
 const UPDATE_REJOIN_WINDOW_MS = 90_000
 
-function restoreChat(chat: unknown[]): ChatMessage[] {
+/** Chat carried over by a v0.2 app updating in the room (newer versions keep it locally). */
+function restoreChat(chat: unknown[]): ChatEnvelope[] {
   const history = parseChatHistory(JSON.stringify({ v: 1, messages: chat.slice(-CHAT_SYNC_MAX) }))
-  return history?.messages ?? []
+  return (history?.messages ?? []).map(({ payload, from, fromName }) => ({
+    from,
+    fromName,
+    event: payload,
+  }))
 }
 
 async function resumeScreenShare(
@@ -100,7 +107,8 @@ function useResumeProvider(roomId: string, room: Room, controller: ScreenShareCo
               : null,
           layout: ui.layout,
           spotlightKey: ui.spotlightKey,
-          chat: useChat.getState().messages.slice(-CHAT_SYNC_MAX),
+          // The chat is cached locally and on the server.
+          chat: [],
         }
         // Tell the others before the connection drops (best effort, short wait).
         await Promise.race([
@@ -140,7 +148,8 @@ export function RoomScreen({ roomId, resume }: { roomId: string; resume?: Resume
   useEffect(() => {
     const resume = attempt === 0 ? initialResume : null
     useRoomUi.getState().reset()
-    useChat.getState().reset(resume ? restoreChat(resume.chat) : [])
+    useChat.getState().reset()
+    const chatSeed = resume ? restoreChat(resume.chat) : []
     if (resume) {
       useRoomUi.setState({ layout: resume.layout, spotlightKey: resume.spotlightKey })
     }
@@ -161,16 +170,14 @@ export function RoomScreen({ roomId, resume }: { roomId: string; resume?: Resume
 
     void (async () => {
       try {
-        const { token, url } = await fetchToken({
-          roomId,
-          name: prefs.name,
-          identity: prefs.identity,
-        })
+        const request = { roomId, name: prefs.name, identity: prefs.identity }
+        const { token, url } = await fetchToken(request)
         if (cancelled) return
+        setChatAuth({ roomId, token, refresh: async () => (await fetchToken(request)).token })
         await room.connect(url, token)
         if (cancelled) return
         prefs.addRecentRoom(roomId)
-        setStatus({ state: 'connected', room, controller })
+        setStatus({ state: 'connected', room, controller, chatSeed })
 
         const withMic = resume ? resume.mic : prefs.joinWithMic
         const withCamera = resume ? resume.camera : prefs.joinWithCamera
@@ -201,6 +208,7 @@ export function RoomScreen({ roomId, resume }: { roomId: string; resume?: Resume
 
     return () => {
       cancelled = true
+      setChatAuth(null)
       controller.dispose()
       void room.disconnect()
     }
@@ -209,7 +217,12 @@ export function RoomScreen({ roomId, resume }: { roomId: string; resume?: Resume
   if (status.state === 'connected') {
     return (
       <RoomContext.Provider value={status.room}>
-        <ConnectedRoom roomId={roomId} room={status.room} controller={status.controller} />
+        <ConnectedRoom
+          roomId={roomId}
+          room={status.room}
+          controller={status.controller}
+          chatSeed={status.chatSeed}
+        />
       </RoomContext.Provider>
     )
   }
@@ -251,10 +264,12 @@ function ConnectedRoom({
   roomId,
   room,
   controller,
+  chatSeed,
 }: {
   roomId: string
   room: Room
   controller: ScreenShareController
+  chatSeed: ChatEnvelope[]
 }) {
   const goHome = useNav((s) => s.goHome)
   const [reconnecting, setReconnecting] = useState(false)
@@ -265,7 +280,7 @@ function ConnectedRoom({
 
   useRoomToasts(room)
   useShortcuts(controller)
-  useChatTransport(room)
+  useChatTransport(room, roomId, chatSeed)
   useResumeProvider(roomId, room, controller)
 
   useEffect(() => {

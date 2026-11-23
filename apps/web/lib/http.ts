@@ -8,7 +8,7 @@ export function corsHeaders(methods: string): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': `${methods}, OPTIONS`,
-    'Access-Control-Allow-Headers': 'Content-Type, X-Share-Client',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Share-Client',
     'Access-Control-Max-Age': '86400',
   }
 }
