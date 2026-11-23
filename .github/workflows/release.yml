@@ -26,8 +26,15 @@ jobs:
         shell: bash
         run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version -w @share/desktop
 
-      # electron-builder creates the release as a draft (see electron-builder.yml).
-      - name: Build installer and upload it to a draft release
+      # Create the draft up front: electron-builder uploads its files in parallel
+      # and, when no release exists yet, each upload may create its own release.
+      - name: Create draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "${GITHUB_REF_NAME#v}" --notes ""
+
+      - name: Build installer and upload it to the draft release
         run: npm run release -w @share/desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
