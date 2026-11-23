@@ -1,0 +1,38 @@
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { AUDIO_PORT_MESSAGE, IPC, type ShareApi, type UpdateStatus } from '../shared/ipc'
+
+function subscribe<T>(channel: string, callback: (payload: T) => void): () => void {
+  const listener = (_event: IpcRendererEvent, payload: T) => callback(payload)
+  ipcRenderer.on(channel, listener)
+  return () => ipcRenderer.removeListener(channel, listener)
+}
+
+// MessagePorts can't cross the context bridge as arguments, so the port that
+// carries app-audio PCM is forwarded to the page with window.postMessage.
+ipcRenderer.on(IPC.appAudioPort, (event) => {
+  window.postMessage({ type: AUDIO_PORT_MESSAGE }, '*', event.ports)
+})
+
+const api: ShareApi = {
+  app: {
+    info: () => ipcRenderer.invoke(IPC.appInfo),
+    openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
+  },
+  capture: {
+    getSources: () => ipcRenderer.invoke(IPC.getSources),
+    select: (sourceId, systemAudio) => ipcRenderer.invoke(IPC.selectSource, sourceId, systemAudio),
+    audioSupport: () => ipcRenderer.invoke(IPC.audioSupport),
+    startAppAudio: (sourceId) => ipcRenderer.invoke(IPC.startAppAudio, sourceId),
+    stopAppAudio: () => ipcRenderer.invoke(IPC.stopAppAudio),
+  },
+  deepLink: {
+    consumePending: () => ipcRenderer.invoke(IPC.consumeDeepLink),
+    onOpen: (callback) => subscribe<string>(IPC.deepLinkOpen, callback),
+  },
+  updater: {
+    onStatus: (callback) => subscribe<UpdateStatus>(IPC.updateStatus, callback),
+    install: () => ipcRenderer.invoke(IPC.updateInstall),
+  },
+}
+
+contextBridge.exposeInMainWorld('share', api)

@@ -1,0 +1,37 @@
+{
+  "name": "share",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Compartilhe tela e câmera com seus amigos.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:desktop": "npm run dev -w @share/desktop",
+    "dev:desktop:2": "npm run dev:2 -w @share/desktop",
+    "dev:web": "npm run dev -w @share/web",
+    "build:web": "npm run build -w @share/web",
+    "dist": "npm run dist -w @share/desktop",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "prettier": "^3.10.1",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.73.0",
+    "vitest": "^5.1.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

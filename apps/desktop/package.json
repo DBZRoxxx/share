@@ -1,0 +1,47 @@
+{
+  "name": "@share/desktop",
+  "productName": "Share",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Compartilhe tela e câmera com seus amigos.",
+  "author": "Ezequiel",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "dev:2": "electron-vite dev -- --multi-instance --profile=2",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
+    "icons": "node scripts/generate-icons.mjs",
+    "dist": "npm run build && electron-builder --win --publish never",
+    "release": "npm run build && electron-builder --win --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11",
+    "loopback-capture": "4.0.0"
+  },
+  "devDependencies": {
+    "@livekit/components-react": "^2.9.26",
+    "@share/shared": "*",
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "electron": "45.4.1",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "livekit-client": "^2.25.0",
+    "lucide-react": "^1.77.0",
+    "radix-ui": "^1.8.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.7.1",
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.0.0",
+    "zustand": "^5.1.0"
+  }
+}

@@ -1,0 +1,46 @@
+appId: com.dbzroxxx.share
+productName: Share
+copyright: Copyright © 2026 Ezequiel
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+asarUnpack:
+  - '**/*.node'
+protocols:
+  - name: Share
+    schemes:
+      - share
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  executableName: Share
+  # Code signing is intentionally off for now. To enable it later with Azure
+  # Trusted Signing, fill in `azureSignOptions` and set the AZURE_* secrets in CI.
+  # azureSignOptions:
+  #   publisherName: ...
+  #   endpoint: https://eus.codesigning.azure.net
+  #   codeSigningAccountName: ...
+  #   certificateProfileName: ...
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Share
+  artifactName: Share-Setup-${version}.${ext}
+publish:
+  provider: github
+  owner: DBZRoxxx
+  repo: share
+  releaseType: release
+electronLanguages:
+  - pt-BR
+  - en-US
