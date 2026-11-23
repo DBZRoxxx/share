@@ -12,7 +12,7 @@ import { Logo } from '@/components/logo'
 import { TitleBar } from '@/components/title-bar'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/primitives'
-import { relativeTime } from '@/lib/utils'
+import { relativeTime, versionLabel } from '@/lib/utils'
 import { useNav } from '@/stores/nav'
 import { usePrefs } from '@/stores/prefs'
 
@@ -27,7 +27,7 @@ export function HomeScreen() {
   const [version, setVersion] = useState('')
 
   useEffect(() => {
-    void window.share.app.info().then((i) => setVersion(i.version))
+    void window.share.app.info().then((i) => setVersion(versionLabel(i)))
   }, [])
 
   const ensureName = (): boolean => {

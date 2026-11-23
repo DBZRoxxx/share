@@ -9,6 +9,7 @@ import {
   getShell,
   type StagedHotUpdate,
 } from './hot-update'
+import { updaterLog as log } from './log'
 import { saveResume } from './resume'
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000
@@ -58,7 +59,7 @@ async function checkHot() {
     })
     if (found) staged = found
   } catch (error) {
-    console.error('[updater] interface update failed', error)
+    log.error('interface update failed', error)
   }
   setStatus(readyStatus())
 }
@@ -91,7 +92,7 @@ function check(): Promise<void> {
       await checkHot()
       await checkFull()
     } catch (error) {
-      console.error('[updater] check failed', error)
+      log.error('check failed', error)
       lastError = error instanceof Error ? error.message : String(error)
       if (status.state === 'downloading' || status.state === 'checking') setStatus(readyStatus())
     } finally {
@@ -129,20 +130,21 @@ export function setupAutoUpdates(opts: {
   if (!app.isPackaged && !process.env['SHARE_UPDATE_FEED']) return
   enabled = true
 
+  autoUpdater.logger = log
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.on('download-progress', (p) => {
     if (silentFull || status.state !== 'downloading' || status.kind !== 'full') return
     setStatus({ ...status, percent: Math.round(p.percent) })
   })
-  autoUpdater.on('error', (error) => console.error('[updater]', error))
+  autoUpdater.on('error', (error) => log.error(error))
 
   // A postponed interface update is in place on the next launch.
   app.on('before-quit', () => {
     if (staged && !fullVersion) activateHotUpdate(staged)
   })
 
-  if (getShell() === null) console.warn('[updater] no shell.json: interface updates disabled')
+  if (getShell() === null) log.warn('no shell.json: interface updates disabled')
   setTimeout(() => void check(), 8_000)
   setInterval(() => void check(), CHECK_INTERVAL_MS)
 }
@@ -151,6 +153,9 @@ export function setupAutoUpdates(opts: {
 export function applyUpdate(resume: unknown): void {
   if (status.state !== 'ready') return
   if (resume) saveResume(resume)
+  log.info(
+    `applying ${status.kind} update ${currentVersion()} -> ${status.version} (app ${app.getVersion()})`,
+  )
 
   if (status.kind === 'hot' && staged) {
     setStatus({ state: 'applying', kind: 'hot' })

@@ -30,3 +30,13 @@ export function relativeTime(timestamp: number, now = Date.now()): string {
   const d = Math.round(h / 24)
   return d === 1 ? 'ontem' : `há ${d} dias`
 }
+
+/**
+ * "0.4.1", or "0.4.1 (app 0.3.0)" when an interface update runs on an older
+ * installed app (e.g. the installer failed), so it's visible at a glance.
+ */
+export function versionLabel(info: { version: string; shellVersion: string }): string {
+  return info.version === info.shellVersion
+    ? info.version
+    : `${info.version} (app ${info.shellVersion})`
+}

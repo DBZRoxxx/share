@@ -17,7 +17,7 @@ import {
 import { useDevices } from '@/lib/devices'
 import { CODEC_LABELS } from '@/lib/media'
 import { previewSound } from '@/lib/sounds'
-import { cn } from '@/lib/utils'
+import { cn, versionLabel } from '@/lib/utils'
 import { usePrefs, type PreferredCodec } from '@/stores/prefs'
 import { useSettingsUi } from '@/stores/settings-ui'
 import { checkForUpdates, useUpdate } from '@/stores/update'
@@ -242,7 +242,7 @@ function AppSection() {
   useEffect(() => {
     let alive = true
     void window.share.settings.get().then((s) => alive && setSettings(s))
-    void window.share.app.info().then((i) => alive && setVersion(i.version))
+    void window.share.app.info().then((i) => alive && setVersion(versionLabel(i)))
     return () => {
       alive = false
     }

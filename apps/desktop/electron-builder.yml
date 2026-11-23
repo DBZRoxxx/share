@@ -38,6 +38,8 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: Share
   artifactName: Share-Setup-${version}.${ext}
+  # Longer retry + clearer message when the old version's files are locked.
+  include: build/installer.nsh
 publish:
   provider: github
   owner: DBZRoxxx
