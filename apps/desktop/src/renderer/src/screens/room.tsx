@@ -16,7 +16,7 @@ import {
   type RemoteParticipant,
 } from 'livekit-client'
 import { Copy, Loader2, RotateCw, Signal, SignalLow, SignalMedium, WifiOff } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { TitleBar } from '@/components/title-bar'
 import { Button } from '@/components/ui/button'
@@ -24,6 +24,9 @@ import { Tooltip } from '@/components/ui/primitives'
 import { copyInvite } from '@/lib/invite'
 import { CAMERA_CAPTURE, cameraPublishOptions, MIC_CAPTURE, ROOM_OPTIONS } from '@/lib/media'
 import { setChatAuth } from '@/lib/chat-api'
+import { AudioOverlay } from '@/music/audio-overlay'
+import { takeMusicSnapshot, type MusicSnapshot } from '@/music/music-store'
+import { useMusicTransport } from '@/music/use-music'
 import { fetchToken, TokenError } from '@/lib/token'
 import { useNav, type JoinOptions } from '@/stores/nav'
 import { usePrefs } from '@/stores/prefs'
@@ -44,7 +47,14 @@ import { Stage } from '@/room/stage'
 
 type Status =
   | { state: 'connecting' }
-  | { state: 'connected'; room: Room; controller: ScreenShareController; chatSeed: ChatEnvelope[] }
+  | {
+      state: 'connected'
+      room: Room
+      controller: ScreenShareController
+      chatSeed: ChatEnvelope[]
+      /** Music to carry on with if nobody in the room has it. */
+      musicSeed: unknown
+    }
   | { state: 'error'; message: string }
   | { state: 'disconnected'; message: string }
 
@@ -111,6 +121,7 @@ function useResumeProvider(roomId: string, room: Room, controller: ScreenShareCo
           // The chat is cached locally and on the server.
           chat: [],
           roomKey: useRoomInfo.getState().roomKey,
+          music: takeMusicSnapshot(),
         }
         // Tell the others before the connection drops (best effort, short wait).
         await Promise.race([
@@ -152,6 +163,8 @@ export function RoomScreen({
   const [initialResume] = useState(() => resume ?? null)
   const [attempt, setAttempt] = useState(0)
   const [result, setResult] = useState<{ attempt: number; status: Status } | null>(null)
+  // What was playing when the last connection to this room ended ("Tentar de novo").
+  const musicCarry = useRef<MusicSnapshot | null>(null)
   // A new attempt starts as "connecting" until its own result arrives.
   const status: Status = result?.attempt === attempt ? result.status : { state: 'connecting' }
 
@@ -168,6 +181,8 @@ export function RoomScreen({
       roomKey: roomKey ?? resume?.roomKey ?? null,
     })
     const chatSeed = resume ? restoreChat(resume.chat) : []
+    const musicSeed = resume?.music ?? musicCarry.current
+    musicCarry.current = null
     if (resume) {
       useRoomUi.setState({ layout: resume.layout, spotlightKey: resume.spotlightKey })
     }
@@ -228,7 +243,7 @@ export function RoomScreen({
           owner: !!res.owner,
           roomKey: res.private && !res.owner ? (res.roomKey ?? null) : null,
         })
-        setStatus({ state: 'connected', room, controller, chatSeed })
+        setStatus({ state: 'connected', room, controller, chatSeed, musicSeed })
 
         const withMic = resume ? resume.mic : prefs.joinWithMic
         const withCamera = resume ? resume.camera : prefs.joinWithCamera
@@ -279,6 +294,8 @@ export function RoomScreen({
           room={status.room}
           controller={status.controller}
           chatSeed={status.chatSeed}
+          musicSeed={status.musicSeed}
+          onMusicCarry={(snapshot) => (musicCarry.current = snapshot)}
         />
       </RoomContext.Provider>
     )
@@ -322,11 +339,15 @@ function ConnectedRoom({
   room,
   controller,
   chatSeed,
+  musicSeed,
+  onMusicCarry,
 }: {
   roomId: string
   room: Room
   controller: ScreenShareController
   chatSeed: ChatEnvelope[]
+  musicSeed: unknown
+  onMusicCarry: (snapshot: MusicSnapshot | null) => void
 }) {
   const goHome = useNav((s) => s.goHome)
   const [reconnecting, setReconnecting] = useState(false)
@@ -338,6 +359,7 @@ function ConnectedRoom({
   useRoomToasts(room)
   useShortcuts(controller)
   useChatTransport(room, roomId, chatSeed)
+  useMusicTransport(room, roomId, musicSeed, onMusicCarry)
   useResumeProvider(roomId, room, controller)
   useRoomNameSync(room, roomId)
 
@@ -396,6 +418,7 @@ function ConnectedRoom({
 
       <ControlBar controller={controller} onLeave={leave} />
       <AudioRenderer />
+      <AudioOverlay />
       <ScreenPicker controller={controller} />
     </div>
   )
@@ -499,6 +522,9 @@ function useShortcuts(controller: ScreenShareController) {
           break
         case 'c':
           ui.togglePanel('chat')
+          break
+        case 'p':
+          ui.togglePanel('music')
           break
         default:
           return

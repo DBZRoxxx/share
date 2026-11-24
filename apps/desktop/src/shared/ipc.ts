@@ -81,6 +81,8 @@ export interface ResumeState {
   chat: unknown[]
   /** Access key of a private room entered without "remember" (v0.5.2+). */
   roomKey?: string | null
+  /** What the room was playing (renderer's MusicSnapshot), to carry on if alone. */
+  music?: unknown
 }
 
 /** Settings owned by the main process (they apply before the renderer loads). */

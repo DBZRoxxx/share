@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="robots" content="noindex" />
+    <title>Share · player</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+      #player {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="player"></div>
+    <script>
+      /*
+       * The Share desktop app embeds this page (its own page loads from
+       * file://, which YouTube refuses to embed into) and drives the official
+       * YouTube player through postMessage:
+       *   app → page  { target: 'share-player', cmd: 'load' | 'play' | 'pause' | 'seek' | 'volume', ... }
+       *   page → app  { source: 'share-player', type: 'ready' | 'time' | 'state' | 'ended' | 'error', ... }
+       */
+      ;(function () {
+        var parentWin = window.parent
+        var player = null
+        var ready = false
+        var pendingLoad = null
+        var pendingVolume = null
+
+        function send(msg) {
+          if (parentWin === window) return
+          msg.source = 'share-player'
+          parentWin.postMessage(msg, '*')
+        }
+
+        function videoId() {
+          try {
+            var data = player.getVideoData()
+            return (data && data.video_id) || null
+          } catch (e) {
+            return null
+          }
+        }
+
+        function applyVolume(volume) {
+          player.setVolume(volume)
+          if (volume > 0) player.unMute()
+          else player.mute()
+        }
+
+        function handle(m) {
+          switch (m.cmd) {
+            case 'load':
+              var opts = { videoId: m.videoId, startSeconds: m.startS || 0 }
+              if (m.autoplay) player.loadVideoById(opts)
+              else player.cueVideoById(opts)
+              break
+            case 'play':
+              player.playVideo()
+              break
+            case 'pause':
+              player.pauseVideo()
+              break
+            case 'seek':
+              player.seekTo(m.t || 0, true)
+              break
+            case 'volume':
+              applyVolume(m.volume)
+              break
+          }
+        }
+
+        window.addEventListener('message', function (e) {
+          if (e.source !== parentWin) return
+          var m = e.data
+          if (!m || m.target !== 'share-player') return
+          if (ready) return handle(m)
+          // Before the player exists, keep what matters for when it does.
+          if (m.cmd === 'load') pendingLoad = m
+          else if (m.cmd === 'volume') pendingVolume = m
+          else if (pendingLoad && (m.cmd === 'play' || m.cmd === 'pause')) {
+            pendingLoad.autoplay = m.cmd === 'play'
+          } else if (pendingLoad && m.cmd === 'seek') pendingLoad.startS = m.t
+        })
+
+        window.onYouTubeIframeAPIReady = function () {
+          player = new YT.Player('player', {
+            width: '100%',
+            height: '100%',
+            playerVars: {
+              controls: 0,
+              disablekb: 1,
+              fs: 0,
+              rel: 0,
+              playsinline: 1,
+              iv_load_policy: 3,
+              origin: location.origin,
+            },
+            events: {
+              onReady: function () {
+                ready = true
+                if (pendingVolume) handle(pendingVolume)
+                if (pendingLoad) handle(pendingLoad)
+                pendingVolume = pendingLoad = null
+                send({ type: 'ready' })
+              },
+              onStateChange: function (e) {
+                send({
+                  type: 'state',
+                  state: e.data,
+                  videoId: videoId(),
+                  t: player.getCurrentTime(),
+                })
+                if (e.data === 0) send({ type: 'ended', videoId: videoId() })
+              },
+              onError: function (e) {
+                send({ type: 'error', code: e.data, videoId: videoId() })
+              },
+            },
+          })
+        }
+
+        setInterval(function () {
+          if (!ready) return
+          send({
+            type: 'time',
+            t: player.getCurrentTime() || 0,
+            state: player.getPlayerState(),
+            videoId: videoId(),
+          })
+        }, 500)
+
+        var tag = document.createElement('script')
+        tag.src = 'https://www.youtube.com/iframe_api'
+        document.head.appendChild(tag)
+      })()
+    </script>
+  </body>
+</html>

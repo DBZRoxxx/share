@@ -1,22 +1,26 @@
 import { useParticipants } from '@livekit/components-react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useCurrentItem } from '@/music/music-store'
+import { MusicPanel } from '@/music/music-panel'
 import { ChatPanel } from './chat-panel'
 import { useChat } from './chat-store'
 import { ParticipantsPanel } from './participants-panel'
 import { useRoomUi, type SidePanel as Tab } from './room-ui'
 
-/** Right-hand panel with the chat and the people list as tabs. */
+/** Right-hand panel with the chat, the people list and the music as tabs. */
 export function SidePanel({ onInvite }: { onInvite: () => void }) {
   const panel = useRoomUi((s) => s.panel)
   const setPanel = useRoomUi((s) => s.setPanel)
   const participants = useParticipants()
   const unread = useChat((s) => s.unread)
+  const playing = !!useCurrentItem()
   if (!panel) return null
 
-  const tabs: { id: Tab; label: string; count?: number; badge?: number }[] = [
+  const tabs: { id: Tab; label: string; count?: number; badge?: number; live?: boolean }[] = [
     { id: 'chat', label: 'Chat', badge: unread },
     { id: 'people', label: 'Pessoas', count: participants.length },
+    { id: 'music', label: 'Música', live: playing },
   ]
 
   return (
@@ -41,6 +45,7 @@ export function SidePanel({ onInvite }: { onInvite: () => void }) {
             >
               {t.label}
               {t.count !== undefined && <span className="text-muted text-xs">{t.count}</span>}
+              {t.live && <span className="bg-accent size-1.5 rounded-full" aria-label="Tocando" />}
               {!!t.badge && panel !== t.id && (
                 <span className="bg-accent flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white">
                   {t.badge > 99 ? '99+' : t.badge}
@@ -58,7 +63,13 @@ export function SidePanel({ onInvite }: { onInvite: () => void }) {
           <X className="size-4" />
         </button>
       </div>
-      {panel === 'chat' ? <ChatPanel /> : <ParticipantsPanel onInvite={onInvite} />}
+      {panel === 'chat' ? (
+        <ChatPanel />
+      ) : panel === 'music' ? (
+        <MusicPanel />
+      ) : (
+        <ParticipantsPanel onInvite={onInvite} />
+      )}
     </aside>
   )
 }

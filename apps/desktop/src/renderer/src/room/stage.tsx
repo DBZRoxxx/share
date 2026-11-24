@@ -8,11 +8,25 @@ import { Link2, MonitorUp } from 'lucide-react'
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { bestGrid } from '@/lib/layout'
+import { useCurrentItem } from '@/music/music-store'
+import { WatchTile } from '@/music/watch-tile'
 import { usePrefs } from '@/stores/prefs'
 import { MediaTile } from './media-tile'
-import { tileKey, useRoomUi } from './room-ui'
+import { WATCH_KEY, tileKey, useRoomUi } from './room-ui'
 
 const GAP = 8
+
+/** What the stage shows: people's cameras and screens, and the watch party. */
+type StageTile = { kind: 'track'; ref: TrackReferenceOrPlaceholder } | { kind: 'watch' }
+
+const WATCH_TILE: StageTile = { kind: 'watch' }
+
+function keyOf(tile: StageTile): string {
+  return tile.kind === 'watch' ? WATCH_KEY : tileKey(tile.ref.participant, tile.ref.source)
+}
+
+const asTiles = (refs: TrackReferenceOrPlaceholder[]): StageTile[] =>
+  refs.map((ref) => ({ kind: 'track', ref }))
 
 function useElementSize<T extends HTMLElement>() {
   const ref = useRef<T>(null)
@@ -35,7 +49,7 @@ function TileGrid({
   screenAudio,
   singleDoubleClick,
 }: {
-  tiles: TrackReferenceOrPlaceholder[]
+  tiles: StageTile[]
   screenAudio: Set<string>
   singleDoubleClick: 'spotlight' | 'fullscreen'
 }) {
@@ -49,16 +63,22 @@ function TileGrid({
         style={{ gap: GAP }}
       >
         {grid.cols > 0 &&
-          tiles.map((ref) => (
-            <MediaTile
-              key={tileKey(ref.participant, ref.source)}
-              trackRef={ref}
-              variant="main"
-              hasScreenAudio={screenAudio.has(ref.participant.identity)}
-              doubleClick={tiles.length === 1 ? singleDoubleClick : 'spotlight'}
-              style={{ width: grid.tileWidth, height: grid.tileHeight }}
-            />
-          ))}
+          tiles.map((tile) => {
+            const doubleClick = tiles.length === 1 ? singleDoubleClick : 'spotlight'
+            const style = { width: grid.tileWidth, height: grid.tileHeight }
+            return tile.kind === 'watch' ? (
+              <WatchTile key={WATCH_KEY} variant="main" doubleClick={doubleClick} style={style} />
+            ) : (
+              <MediaTile
+                key={keyOf(tile)}
+                trackRef={tile.ref}
+                variant="main"
+                hasScreenAudio={screenAudio.has(tile.ref.participant.identity)}
+                doubleClick={doubleClick}
+                style={style}
+              />
+            )
+          })}
       </div>
     </div>
   )
@@ -83,6 +103,7 @@ export function Stage({ onInvite }: { onInvite: () => void }) {
   const layout = useRoomUi((s) => s.layout)
   const spotlightKey = useRoomUi((s) => s.spotlightKey)
   const setPickerOpen = useRoomUi((s) => s.setPickerOpen)
+  const watching = useCurrentItem()?.mode === 'video'
 
   const screens = useTracks([Track.Source.ScreenShare], { onlySubscribed: false }).filter(
     (ref) => showOwnScreen || !ref.participant.isLocal,
@@ -102,29 +123,27 @@ export function Stage({ onInvite }: { onInvite: () => void }) {
   )
   const activeCameras = cameras.filter((ref) => isTrackReference(ref) && !ref.publication.isMuted)
 
-  const all: TrackReferenceOrPlaceholder[] = [...sortedScreens, ...cameras]
+  // The watch party takes the prime spot, ahead of shared screens.
+  const shared: StageTile[] = [...(watching ? [WATCH_TILE] : []), ...asTiles(sortedScreens)]
+  const all: StageTile[] = [...shared, ...asTiles(cameras)]
   const spotlit =
-    layout === 'spotlight'
-      ? (all.find((r) => tileKey(r.participant, r.source) === spotlightKey) ?? sortedScreens[0])
-      : undefined
+    layout === 'spotlight' ? (all.find((t) => keyOf(t) === spotlightKey) ?? shared[0]) : undefined
 
-  let main: TrackReferenceOrPlaceholder[]
-  let strip: TrackReferenceOrPlaceholder[]
+  let main: StageTile[]
+  let strip: StageTile[]
   if (spotlit) {
-    const spotKey = tileKey(spotlit.participant, spotlit.source)
+    const spotKey = keyOf(spotlit)
     main = [spotlit]
-    strip = [...sortedScreens, ...cameras].filter(
-      (r) => tileKey(r.participant, r.source) !== spotKey,
-    )
-  } else if (sortedScreens.length > 0) {
-    main = sortedScreens
-    strip = activeCameras
+    strip = all.filter((t) => keyOf(t) !== spotKey)
+  } else if (shared.length > 0) {
+    main = shared
+    strip = asTiles(activeCameras)
   } else {
-    main = cameras
+    main = asTiles(cameras)
     strip = []
   }
 
-  const nobodySharing = screens.length === 0
+  const nobodySharing = shared.length === 0
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 gap-2 p-2">
@@ -141,14 +160,18 @@ export function Stage({ onInvite }: { onInvite: () => void }) {
           aria-label="Outros vídeos"
           className="animate-fade-in flex w-60 shrink-0 flex-col gap-2 overflow-y-auto pr-0.5 xl:w-72"
         >
-          {strip.map((ref) => (
-            <MediaTile
-              key={tileKey(ref.participant, ref.source)}
-              trackRef={ref}
-              variant="strip"
-              hasScreenAudio={screenAudio.has(ref.participant.identity)}
-            />
-          ))}
+          {strip.map((tile) =>
+            tile.kind === 'watch' ? (
+              <WatchTile key={WATCH_KEY} variant="strip" />
+            ) : (
+              <MediaTile
+                key={keyOf(tile)}
+                trackRef={tile.ref}
+                variant="strip"
+                hasScreenAudio={screenAudio.has(tile.ref.participant.identity)}
+              />
+            ),
+          )}
         </aside>
       )}
     </div>

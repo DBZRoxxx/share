@@ -2,7 +2,10 @@ import { Track, type Participant } from 'livekit-client'
 import { create } from 'zustand'
 
 export type LayoutMode = 'grid' | 'spotlight'
-export type SidePanel = 'chat' | 'people'
+export type SidePanel = 'chat' | 'people' | 'music'
+
+/** Stage key of the watch party tile (the room's YouTube video). */
+export const WATCH_KEY = 'watch-party'
 
 /** Stable key for a participant's track slot, e.g. `abc123:screen_share`. */
 export function tileKey(participant: Participant, source: Track.Source): string {

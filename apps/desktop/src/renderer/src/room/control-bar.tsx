@@ -9,6 +9,7 @@ import {
   MicOff,
   MonitorOff,
   MonitorUp,
+  Music,
   PhoneOff,
   RectangleHorizontal,
   Repeat2,
@@ -22,6 +23,7 @@ import { Tooltip } from '@/components/ui/primitives'
 import { describeMediaError } from '@/lib/devices'
 import { CAMERA_CAPTURE, cameraPublishOptions, MIC_CAPTURE } from '@/lib/media'
 import { cn } from '@/lib/utils'
+import { useMusic } from '@/music/music-store'
 import { usePrefs } from '@/stores/prefs'
 import { useChat } from './chat-store'
 import { useRoomUi } from './room-ui'
@@ -138,6 +140,7 @@ export function ControlBar({
   const panel = useRoomUi((s) => s.panel)
   const togglePanel = useRoomUi((s) => s.togglePanel)
   const unread = useChat((s) => s.unread)
+  const musicPlaying = useMusic((s) => !!s.room?.playing)
   const setPickerOpen = useRoomUi((s) => s.setPickerOpen)
   const setSettingsOpen = useSettingsUi((s) => s.setOpen)
 
@@ -244,6 +247,22 @@ export function ControlBar({
           }
         >
           <MessageCircle />
+        </ControlButton>
+        <ControlButton
+          label="Música e watch party"
+          shortcut="Ctrl+Shift+P"
+          active={panel === 'music'}
+          onClick={() => togglePanel('music')}
+          badge={
+            musicPlaying ? (
+              <span
+                className="bg-accent ring-surface absolute -top-0.5 -right-0.5 size-3 rounded-full ring-2"
+                aria-label="Tocando"
+              />
+            ) : undefined
+          }
+        >
+          <Music />
         </ControlButton>
         <ControlButton
           label="Pessoas na sala"

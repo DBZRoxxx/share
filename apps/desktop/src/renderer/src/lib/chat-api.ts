@@ -12,6 +12,7 @@ import type {
   ChatFileUrlResponse,
   ChatPostResponse,
 } from '@share/shared/chat'
+import type { MusicResolveResponse } from '@share/shared/music'
 import { upload } from '@vercel/blob/client'
 import { WEB_URL } from './config'
 
@@ -127,6 +128,15 @@ export const chatApi = {
       return { pathname: (await run(token)).pathname }
     }
   },
+}
+
+/** Music: what a YouTube link adds to the queue (same room token as the chat). */
+export const musicApi = {
+  resolve: (roomId: string, url: string) =>
+    request<MusicResolveResponse>(
+      roomId,
+      `/api/music/${roomId}/resolve?url=${encodeURIComponent(url)}`,
+    ),
 }
 
 export class RoomApiError extends Error {

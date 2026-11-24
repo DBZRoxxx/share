@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./chat": "./src/chat-protocol.ts",
+    "./music": "./src/music.ts",
     "./room": "./src/room.ts"
   },
   "scripts": {

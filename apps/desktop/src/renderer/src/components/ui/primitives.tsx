@@ -183,7 +183,11 @@ export function Switch(props: ComponentProps<typeof SwitchPrimitive.Root>) {
 
 /* --------------------------------- Slider -------------------------------- */
 
-export function Slider({ className, ...props }: ComponentProps<typeof SliderPrimitive.Root>) {
+export function Slider({
+  className,
+  thumbLabel = 'Volume',
+  ...props
+}: ComponentProps<typeof SliderPrimitive.Root> & { thumbLabel?: string }) {
   return (
     <SliderPrimitive.Root
       className={cn('relative flex h-5 w-full touch-none items-center select-none', className)}
@@ -194,7 +198,7 @@ export function Slider({ className, ...props }: ComponentProps<typeof SliderPrim
       </SliderPrimitive.Track>
       <SliderPrimitive.Thumb
         className="focus-visible:ring-accent block size-3.5 rounded-full bg-white shadow outline-none focus-visible:ring-2"
-        aria-label="Volume"
+        aria-label={thumbLabel}
       />
     </SliderPrimitive.Root>
   )

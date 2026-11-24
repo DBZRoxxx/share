@@ -63,6 +63,10 @@ interface PrefsState {
   showStats: boolean
   showOwnScreen: boolean
   notifications: NotificationPrefs
+  /** Music and watch party volume on this computer, 0–1. */
+  musicVolume: number
+  /** Music muted on this computer only (it keeps playing for everyone else). */
+  musicMuted: boolean
   set: (
     partial: Partial<
       Omit<
@@ -104,6 +108,8 @@ export const usePrefs = create<PrefsState>()(
       showStats: false,
       showOwnScreen: true,
       notifications: DEFAULT_NOTIFICATIONS,
+      musicVolume: 0.7,
+      musicMuted: false,
       set: (partial) => set(partial),
       setNotifications: (partial) =>
         set((s) => ({ notifications: { ...s.notifications, ...partial } })),
