@@ -15,6 +15,7 @@ import {
   df_get_frame_length,
   df_process_frame,
   df_set_atten_lim,
+  df_set_post_filter_beta,
   initSync,
 } from './dfn3/df'
 import { Gate, Limiter, rms, type GateParams } from './gate-logic'
@@ -52,9 +53,10 @@ class Denoiser {
   }
 
   /**
-   * Maximum attenuation of the noise, dB (100 = remove it entirely). Lower
-   * values keep a trace of the original sound, which masks the model's
-   * metallic artifacts on loud or saturated speech.
+   * Maximum attenuation of the noise, dB (100 = remove it entirely). libDF
+   * mixes `10^(-dB/20)` of the original back into each frame: lower values
+   * keep a trace of it, so speech the model misjudges as noise isn't cut and
+   * its metallic artifacts on loud speech are masked.
    */
   setAttenLimit(db: number) {
     df_set_atten_lim(this.state, db)
@@ -99,7 +101,7 @@ class MicProcessor extends AudioWorkletProcessor {
   private params: MicParams = {
     gain: 1,
     ai: false,
-    attenLimitDb: 30,
+    attenLimitDb: 20,
     mode: 'voice',
     thresholdDb: -50,
     autoThreshold: true,
@@ -141,6 +143,9 @@ class MicProcessor extends AudioWorkletProcessor {
         try {
           initSync(data.module)
           const state = df_create(new Uint8Array(data.model), this.params.attenLimitDb)
+          // Post-filter off (libDF's default today, pinned here): it trades
+          // speech fidelity for more suppression.
+          df_set_post_filter_beta(state, 0)
           this.denoiser = new Denoiser(state, df_get_frame_length(state))
           this.post({ type: 'dfn-ready' })
         } catch (error) {

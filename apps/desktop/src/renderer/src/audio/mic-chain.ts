@@ -66,6 +66,28 @@ export function effectiveNoiseSuppression(audio: AudioPrefs): NoiseSuppression {
     : audio.noiseSuppression
 }
 
+/**
+ * Chromium's gain control is off whenever DeepFilterNet runs: it changes the
+ * level ahead of the model, which then cuts the voice. The saved choice still
+ * applies with basic or no suppression.
+ */
+export function effectiveAutoGainControl(audio: AudioPrefs): boolean {
+  return effectiveNoiseSuppression(audio) === 'ai' ? false : audio.autoGainControl
+}
+
+/** What Chromium actually applied to the capture, for the DevTools console. */
+function logCapture(track: MediaStreamTrack) {
+  const { noiseSuppression, autoGainControl, echoCancellation, sampleRate } = track.getSettings()
+  const { voiceIsolation } = track.getSettings() as { voiceIsolation?: boolean }
+  console.info('[mic] capture', {
+    noiseSuppression,
+    autoGainControl,
+    echoCancellation,
+    voiceIsolation,
+    sampleRate,
+  })
+}
+
 /** Push-to-talk needs a binding; until one is chosen, voice activity applies. */
 export function usesPushToTalk(audio: AudioPrefs): boolean {
   return audio.inputMode === 'ptt' && !!audio.pttBinding
@@ -115,6 +137,7 @@ export async function createMicChain(
   node.connect(destination)
 
   const connect = (track: MediaStreamTrack) => {
+    logCapture(track)
     const source = ctx.createMediaStreamSource(new MediaStream([track]))
     source.connect(node)
     return source

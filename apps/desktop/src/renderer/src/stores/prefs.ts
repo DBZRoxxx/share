@@ -56,12 +56,13 @@ export type InputMode = 'voice' | 'ptt'
 export interface AudioPrefs {
   noiseSuppression: NoiseSuppression
   /**
-   * How much DeepFilterNet may remove, dB (10–100). Lower keeps a little of
-   * the original sound, which hides the robotic artifacts on loud speech.
+   * How much DeepFilterNet may remove, dB (6–40, 20 recommended). Lower keeps
+   * a little of the original sound, so the voice isn't cut and loud speech
+   * doesn't sound robotic; above ~40 dB the difference can't be heard.
    */
   noiseStrengthDb: number
   echoCancellation: boolean
-  /** Chromium's automatic gain control on the capture. */
+  /** Chromium's automatic gain control on the capture (never with `ai`). */
   autoGainControl: boolean
   /** Gain applied to the microphone, 0–2 (100% = 1). */
   inputVolume: number
@@ -79,7 +80,7 @@ export interface AudioPrefs {
 
 export const DEFAULT_AUDIO: AudioPrefs = {
   noiseSuppression: 'ai',
-  noiseStrengthDb: 30,
+  noiseStrengthDb: 20,
   echoCancellation: true,
   autoGainControl: true,
   inputVolume: 1,
@@ -138,6 +139,9 @@ interface PrefsState {
 
 const MAX_RECENT = 40
 
+export const NOISE_STRENGTH_MIN_DB = 6
+export const NOISE_STRENGTH_MAX_DB = 40
+
 export const usePrefs = create<PrefsState>()(
   persist(
     (set) => ({
@@ -193,8 +197,24 @@ export const usePrefs = create<PrefsState>()(
     }),
     {
       name: 'share-prefs',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
+      // v2: the suppression strength went from 10–100 dB (default 30) to
+      // 6–40 dB (default 20). The old default moves to the new one.
+      migrate: (persisted, version) => {
+        const saved = (persisted ?? {}) as Partial<PrefsState>
+        if (version < 2 && saved.audio && typeof saved.audio.noiseStrengthDb === 'number') {
+          const db = saved.audio.noiseStrengthDb
+          saved.audio = {
+            ...saved.audio,
+            noiseStrengthDb:
+              db === 30
+                ? DEFAULT_AUDIO.noiseStrengthDb
+                : Math.min(NOISE_STRENGTH_MAX_DB, Math.max(NOISE_STRENGTH_MIN_DB, db)),
+          }
+        }
+        return saved as PrefsState
+      },
       // Saved prefs from older versions lack newer options: fill in defaults.
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<PrefsState>

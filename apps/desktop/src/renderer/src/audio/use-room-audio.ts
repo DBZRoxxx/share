@@ -23,10 +23,13 @@ function useCaptureSettings(room: Room) {
     const wanted = micConstraints()
     // The capture's own settings (mediaStreamTrack is the processed output).
     const current = track.getSourceTrackSettings()
+    // Not every Chromium reports voice isolation; when it does, it must be off.
+    const { voiceIsolation } = current as { voiceIsolation?: boolean }
     if (
       current.echoCancellation === wanted.echoCancellation &&
       current.noiseSuppression === wanted.noiseSuppression &&
-      current.autoGainControl === wanted.autoGainControl
+      current.autoGainControl === wanted.autoGainControl &&
+      !voiceIsolation
     )
       return
     track.restartTrack(wanted).catch((error: unknown) => {

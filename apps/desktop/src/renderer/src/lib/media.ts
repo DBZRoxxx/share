@@ -11,7 +11,11 @@ import {
   type VideoCaptureOptions,
 } from 'livekit-client'
 import { toast } from 'sonner'
-import { effectiveNoiseSuppression, micAudioContext } from '@/audio/mic-chain'
+import {
+  effectiveAutoGainControl,
+  effectiveNoiseSuppression,
+  micAudioContext,
+} from '@/audio/mic-chain'
 import { MicTrackProcessor } from '@/audio/mic-processor'
 import { usePrefs, type PreferredCodec, type ScreenQuality } from '@/stores/prefs'
 
@@ -80,7 +84,9 @@ export function cameraPublishOptions(codec: PreferredCodec): TrackPublishOptions
 /**
  * What getUserMedia should do for the microphone, from the audio settings.
  * Chromium's own noise suppression only runs in `basic` mode: with `ai` the
- * mic chain (DeepFilterNet3) does it, and doing both muffles the voice.
+ * mic chain (DeepFilterNet3) does it, and doing both muffles the voice. Gain
+ * control is off with `ai` too. Voice isolation (the platform's suppressor,
+ * which overrides `noiseSuppression` where supported) is never used.
  */
 export function micConstraints(): AudioCaptureOptions {
   const { micId, audio } = usePrefs.getState()
@@ -88,7 +94,8 @@ export function micConstraints(): AudioCaptureOptions {
     deviceId: micId ?? undefined,
     echoCancellation: audio.echoCancellation,
     noiseSuppression: effectiveNoiseSuppression(audio) === 'basic',
-    autoGainControl: audio.autoGainControl,
+    autoGainControl: effectiveAutoGainControl(audio),
+    voiceIsolation: false,
   }
 }
 
@@ -131,7 +138,14 @@ export const ROOM_OPTIONS: RoomOptions = {
   dynacast: true,
   disconnectOnPageLeave: true,
   videoCaptureDefaults: CAMERA_CAPTURE,
-  audioCaptureDefaults: { echoCancellation: true, noiseSuppression: false, autoGainControl: true },
+  // Overrides livekit-client's own defaults, which turn every Chromium
+  // processor on (voice isolation included); micConstraints() sets the rest.
+  audioCaptureDefaults: {
+    echoCancellation: true,
+    noiseSuppression: false,
+    autoGainControl: false,
+    voiceIsolation: false,
+  },
   publishDefaults: {
     videoCodec: 'h264',
     screenShareEncoding: SCREEN_PRESETS.motion.publish.screenShareEncoding,

@@ -9,7 +9,14 @@ import { Button } from '@/components/ui/button'
 import { Field, Kbd, Select, Slider, Switch } from '@/components/ui/primitives'
 import { useDevices } from '@/lib/devices'
 import { cn } from '@/lib/utils'
-import { usePrefs, type InputMode, type NoiseSuppression } from '@/stores/prefs'
+import {
+  DEFAULT_AUDIO,
+  NOISE_STRENGTH_MAX_DB,
+  NOISE_STRENGTH_MIN_DB,
+  usePrefs,
+  type InputMode,
+  type NoiseSuppression,
+} from '@/stores/prefs'
 
 const NOISE_OPTIONS: { value: NoiseSuppression; label: string }[] = [
   { value: 'ai', label: 'IA (DeepFilterNet) — recomendado' },
@@ -22,6 +29,9 @@ export function AudioSection({ room }: { room: Room | null }) {
   const prefs = usePrefs()
   const audio = prefs.audio
   const setAudio = prefs.setAudio
+  const dfnFailed = useMic((s) => s.dfn === 'error')
+  // Same rule as effectiveAutoGainControl(): no gain control while the AI runs.
+  const agcLocked = audio.noiseSuppression === 'ai' && !dfnFailed
   const test = useMicTest()
   // Device names only show once the mic was opened; refresh then.
   const mics = useDevices('audioinput', test.running)
@@ -130,8 +140,13 @@ export function AudioSection({ room }: { room: Room | null }) {
       />
       <ToggleRow
         label="Controle automático de ganho"
-        hint="Ajusta o volume do microfone sozinho. Se sua voz estoura ao falar alto, desligue e baixe o volume do microfone no Windows."
-        checked={audio.autoGainControl}
+        hint={
+          agcLocked
+            ? 'Desligado com a supressão por IA: ele altera o volume antes da IA e corta a voz.'
+            : 'Ajusta o volume do microfone sozinho. Se sua voz estoura ao falar alto, desligue e baixe o volume do microfone no Windows.'
+        }
+        checked={agcLocked ? false : audio.autoGainControl}
+        disabled={agcLocked}
         onChange={(v) => setAudio({ autoGainControl: v })}
       />
     </section>
@@ -379,25 +394,23 @@ function NoiseStrength() {
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between text-sm">
         <span className="font-medium">Intensidade da supressão</span>
-        <span className="text-muted tabular-nums">
-          {strength >= 100 ? 'Máxima' : `${Math.round(strength)} dB`}
-        </span>
+        <span className="text-muted tabular-nums">{Math.round(strength)} dB</span>
       </div>
       <div className="flex items-center gap-3">
         <span className="text-muted text-xs">Suave</span>
         <Slider
           aria-label="Intensidade da supressão"
           thumbLabel="Intensidade da supressão"
-          min={10}
-          max={100}
+          min={NOISE_STRENGTH_MIN_DB}
+          max={NOISE_STRENGTH_MAX_DB}
           step={1}
           value={[strength]}
-          onValueChange={([v]) => setAudio({ noiseStrengthDb: v ?? 30 })}
+          onValueChange={([v]) => setAudio({ noiseStrengthDb: v ?? DEFAULT_AUDIO.noiseStrengthDb })}
         />
-        <span className="text-muted text-xs">Máxima</span>
+        <span className="text-muted text-xs">Forte</span>
       </div>
       <span className="text-muted text-xs">
-        Se a voz ficar metálica ou robótica ao falar alto, diminua.
+        20 dB é o recomendado. Se a voz cortar ou ficar robótica, diminua; se sobrar ruído, aumente.
       </span>
     </div>
   )
@@ -446,11 +459,13 @@ export function ToggleRow({
   label,
   hint,
   checked,
+  disabled,
   onChange,
 }: {
   label: string
   hint: string
   checked: boolean
+  disabled?: boolean
   onChange: (value: boolean) => void
 }) {
   return (
@@ -459,7 +474,7 @@ export function ToggleRow({
         <p className="text-sm font-medium">{label}</p>
         <p className="text-muted text-xs">{hint}</p>
       </div>
-      <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
+      <Switch checked={checked} disabled={disabled} onCheckedChange={onChange} aria-label={label} />
     </div>
   )
 }
