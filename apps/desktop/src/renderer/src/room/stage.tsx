@@ -4,7 +4,7 @@ import {
   type TrackReferenceOrPlaceholder,
 } from '@livekit/components-react'
 import { Track } from 'livekit-client'
-import { Link2, MonitorUp } from 'lucide-react'
+import { Link2, MonitorUp, X } from 'lucide-react'
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { bestGrid } from '@/lib/layout'
@@ -84,15 +84,33 @@ function TileGrid({
   )
 }
 
-function EmptyState({ onShare, onInvite }: { onShare: () => void; onInvite: () => void }) {
+function EmptyState({
+  onShare,
+  onInvite,
+  onDismiss,
+}: {
+  onShare: () => void
+  onInvite: () => void
+  onDismiss: () => void
+}) {
   return (
-    <div className="animate-fade-in border-border bg-surface/95 pointer-events-auto absolute inset-x-0 bottom-6 mx-auto flex w-fit items-center gap-3 rounded-2xl border px-4 py-3 shadow-xl backdrop-blur">
+    <div className="animate-fade-in border-border bg-surface/95 pointer-events-auto absolute inset-x-0 bottom-6 mx-auto flex w-fit items-center gap-3 rounded-2xl border py-3 pr-2 pl-4 shadow-xl backdrop-blur">
       <span className="text-muted text-sm">Ninguém está compartilhando a tela ainda.</span>
       <Button size="sm" variant="primary" onClick={onShare}>
         <MonitorUp /> Compartilhar tela
       </Button>
       <Button size="sm" variant="ghost" onClick={onInvite}>
         <Link2 /> Copiar convite
+      </Button>
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        aria-label="Fechar aviso"
+        title="Fechar"
+        onClick={onDismiss}
+        className="text-muted hover:text-fg"
+      >
+        <X />
       </Button>
     </div>
   )
@@ -144,6 +162,8 @@ export function Stage({ onInvite }: { onInvite: () => void }) {
   }
 
   const nobodySharing = shared.length === 0
+  // Closing the hint hides it until you leave the room.
+  const [emptyDismissed, setEmptyDismissed] = useState(false)
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 gap-2 p-2">
@@ -153,7 +173,13 @@ export function Stage({ onInvite }: { onInvite: () => void }) {
           screenAudio={screenAudio}
           singleDoubleClick={spotlit ? 'fullscreen' : 'spotlight'}
         />
-        {nobodySharing && <EmptyState onShare={() => setPickerOpen(true)} onInvite={onInvite} />}
+        {nobodySharing && !emptyDismissed && (
+          <EmptyState
+            onShare={() => setPickerOpen(true)}
+            onInvite={onInvite}
+            onDismiss={() => setEmptyDismissed(true)}
+          />
+        )}
       </div>
       {strip.length > 0 && (
         <aside
