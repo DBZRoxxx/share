@@ -34,6 +34,12 @@ const api: ShareApi = {
     startAppAudio: (sourceId) => ipcRenderer.invoke(IPC.startAppAudio, sourceId),
     stopAppAudio: () => ipcRenderer.invoke(IPC.stopAppAudio),
   },
+  ptt: {
+    configure: (config) => ipcRenderer.invoke(IPC.pttConfigure, config),
+    onState: (callback) => subscribe<boolean>(IPC.pttState, callback),
+    record: () => ipcRenderer.invoke(IPC.pttRecord),
+    cancelRecord: () => ipcRenderer.invoke(IPC.pttCancelRecord),
+  },
   deepLink: {
     consumePending: () => ipcRenderer.invoke(IPC.consumeDeepLink),
     onOpen: (callback) => subscribe<string>(IPC.deepLinkOpen, callback),

@@ -6,6 +6,7 @@ import { IPC, type AppInfo } from '../shared/ipc'
 import { getAudioSupport, startAppAudio, stopAppAudio } from './app-audio'
 import { installDisplayMediaHandler, listSources, selectSource } from './capture'
 import { activeRendererEntry, cleanupHotBundles, currentVersion, markActiveBad } from './hot-update'
+import { cancelPttRecording, configurePtt, recordPttBinding, stopPtt } from './push-to-talk'
 import { consumeResume } from './resume'
 import { getSettings, updateSettings } from './settings'
 import { AppTray } from './tray'
@@ -140,9 +141,15 @@ function createWindow() {
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
     stopAppAudio()
+    stopPtt()
     // Pop-out windows belong to the main window's session; close them too.
     for (const other of BrowserWindow.getAllWindows()) other.close()
   })
+
+  // A reload (interface update) or crash drops the room: stop the input hook
+  // until the new page turns push-to-talk back on.
+  win.webContents.on('did-navigate', () => stopPtt())
+  win.webContents.on('render-process-gone', () => stopPtt())
 
   win.webContents.on('did-finish-load', () => {
     if (profile) win.setTitle(`Share (perfil ${profile})`)
@@ -281,6 +288,10 @@ function registerIpc() {
     updateSettings(typeof partial === 'object' && partial ? partial : {}),
   )
 
+  ipcMain.handle(IPC.pttConfigure, (event, config: unknown) => configurePtt(event.sender, config))
+  ipcMain.handle(IPC.pttRecord, (event) => recordPttBinding(event.sender))
+  ipcMain.handle(IPC.pttCancelRecord, () => cancelPttRecording())
+
   ipcMain.handle(IPC.updateGetStatus, () => getUpdateStatus())
   ipcMain.handle(IPC.updateApply, (_e, resume: unknown) => applyUpdate(resume))
   ipcMain.handle(IPC.updateCheck, () => checkForUpdates())
@@ -316,4 +327,7 @@ app.on('before-quit', () => {
   stopAppAudio()
 })
 
-app.on('will-quit', () => tray.destroy())
+app.on('will-quit', () => {
+  stopPtt()
+  tray.destroy()
+})

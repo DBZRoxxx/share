@@ -93,6 +93,21 @@ export interface MainSettings {
   trayHintShown: boolean
 }
 
+/** Push-to-talk key or mouse button, as seen by the global input hook. */
+export interface PttBinding {
+  kind: 'key' | 'mouse'
+  /** uiohook keycode, or mouse button number (3 = middle, 4/5 = side buttons). */
+  code: number
+  /** What to show the user, e.g. "V", "Mouse 4". */
+  label: string
+}
+
+export interface PttConfig {
+  /** Listen for the binding (push-to-talk on and the user in a room). */
+  active: boolean
+  binding: PttBinding | null
+}
+
 export interface AppInfo {
   /** Version the user is running (includes an applied interface update). */
   version: string
@@ -131,6 +146,15 @@ export interface ShareApi {
     startAppAudio(sourceId: string): Promise<StartAppAudioResult>
     stopAppAudio(): Promise<void>
   }
+  ptt: {
+    /** Starts or stops listening for the push-to-talk binding, globally. */
+    configure(config: PttConfig): Promise<void>
+    /** The binding was pressed (true) or released (false). */
+    onState(callback: (pressed: boolean) => void): () => void
+    /** Resolves with the next key or mouse button pressed (null: cancelled, Esc or timeout). */
+    record(): Promise<PttBinding | null>
+    cancelRecord(): Promise<void>
+  }
   deepLink: {
     /** Returns (and clears) a room link the app was launched with. */
     consumePending(): Promise<string | null>
@@ -168,4 +192,8 @@ export const IPC = {
   updateGetStatus: 'updater:get-status',
   updateApply: 'updater:apply',
   updateCheck: 'updater:check',
+  pttConfigure: 'ptt:configure',
+  pttState: 'ptt:state',
+  pttRecord: 'ptt:record',
+  pttCancelRecord: 'ptt:cancel-record',
 } as const

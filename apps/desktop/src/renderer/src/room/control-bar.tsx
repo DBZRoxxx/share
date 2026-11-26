@@ -21,8 +21,10 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/primitives'
 import { describeMediaError } from '@/lib/devices'
-import { CAMERA_CAPTURE, cameraPublishOptions, MIC_CAPTURE } from '@/lib/media'
+import { CAMERA_CAPTURE, cameraPublishOptions, micCaptureOptions } from '@/lib/media'
 import { cn } from '@/lib/utils'
+import { usesPushToTalk } from '@/audio/mic-chain'
+import { useMic } from '@/audio/mic-state'
 import { useMusic } from '@/music/music-store'
 import { usePrefs } from '@/stores/prefs'
 import { useChat } from './chat-store'
@@ -36,6 +38,7 @@ function ControlButton({
   active,
   danger,
   busy,
+  live,
   onClick,
   children,
   badge,
@@ -45,6 +48,8 @@ function ControlButton({
   active?: boolean
   danger?: boolean
   busy?: boolean
+  /** Ring around the button: the mic is transmitting right now. */
+  live?: boolean
   onClick: () => void
   children: ReactNode
   badge?: ReactNode
@@ -64,6 +69,7 @@ function ControlButton({
             : active
               ? 'bg-accent hover:bg-accent-hover text-white'
               : 'bg-surface-2 text-fg hover:bg-surface-3',
+          live && 'ring-success ring-offset-surface ring-2 ring-offset-2',
         )}
       >
         {busy ? <Loader2 className="animate-spin" /> : children}
@@ -88,7 +94,7 @@ function Badge({ children, accent }: { children: ReactNode; accent?: boolean }) 
 
 export function useMediaToggles() {
   const { localParticipant, isCameraEnabled, isMicrophoneEnabled } = useLocalParticipant()
-  const { cameraId, micId, videoCodec } = usePrefs()
+  const { cameraId, videoCodec } = usePrefs()
   const [busy, setBusy] = useState<'camera' | 'mic' | null>(null)
 
   const toggleCamera = async () => {
@@ -111,10 +117,7 @@ export function useMediaToggles() {
     if (busy) return
     setBusy('mic')
     try {
-      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled, {
-        ...MIC_CAPTURE,
-        deviceId: micId ?? undefined,
-      })
+      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled, micCaptureOptions())
     } catch (error) {
       toast.error(describeMediaError(error, 'microfone'))
     } finally {
@@ -143,6 +146,8 @@ export function ControlBar({
   const musicPlaying = useMusic((s) => !!s.room?.playing)
   const setPickerOpen = useRoomUi((s) => s.setPickerOpen)
   const setSettingsOpen = useSettingsUi((s) => s.setOpen)
+  const transmitting = useMic((s) => !!s.level?.open)
+  const pttKey = usePrefs((s) => (usesPushToTalk(s.audio) ? s.audio.pttBinding?.label : null))
 
   const sharing = share.status === 'live'
 
@@ -165,9 +170,16 @@ export function ControlBar({
 
       <div className="flex items-center gap-2">
         <ControlButton
-          label={media.isMicrophoneEnabled ? 'Desligar microfone' : 'Ligar microfone'}
+          label={
+            media.isMicrophoneEnabled
+              ? pttKey
+                ? `Desligar microfone · segure ${pttKey} para falar`
+                : 'Desligar microfone'
+              : 'Ligar microfone'
+          }
           shortcut="Ctrl+Shift+M"
           active={media.isMicrophoneEnabled}
+          live={media.isMicrophoneEnabled && transmitting}
           busy={media.busy === 'mic'}
           onClick={() => void media.toggleMic()}
         >

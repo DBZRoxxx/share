@@ -1,7 +1,17 @@
 import { RoomContext, useLocalParticipant, useRoomContext } from '@livekit/components-react'
 import { DISPLAY_NAME_MAX } from '@share/shared'
 import type { MainSettings } from '@shared/ipc'
-import { Play, RefreshCw, Volume2 } from 'lucide-react'
+import {
+  Bell,
+  Mic,
+  Play,
+  RefreshCw,
+  Settings2,
+  UserRound,
+  Video,
+  Volume2,
+  type LucideIcon,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -12,66 +22,107 @@ import {
   Input,
   Select,
   Slider,
-  Switch,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from '@/components/ui/primitives'
 import { useDevices } from '@/lib/devices'
 import { CODEC_LABELS } from '@/lib/media'
 import { previewSound } from '@/lib/sounds'
 import { cn, versionLabel } from '@/lib/utils'
 import { usePrefs, type PreferredCodec } from '@/stores/prefs'
-import { useSettingsUi } from '@/stores/settings-ui'
+import { useSettingsUi, type SettingsTab } from '@/stores/settings-ui'
+import { AudioSection, ToggleRow } from './audio-settings'
 import { checkForUpdates, useUpdate } from '@/stores/update'
+
+interface TabDef {
+  value: SettingsTab
+  label: string
+  icon: LucideIcon
+  /** Only shown while in a room. */
+  roomOnly?: boolean
+}
+
+const TABS: TabDef[] = [
+  { value: 'profile', label: 'Você', icon: UserRound, roomOnly: true },
+  { value: 'audio', label: 'Voz e áudio', icon: Mic },
+  { value: 'video', label: 'Vídeo', icon: Video, roomOnly: true },
+  { value: 'notifications', label: 'Notificações', icon: Bell },
+  { value: 'app', label: 'App', icon: Settings2 },
+]
 
 export function SettingsDialog() {
   const open = useSettingsUi((s) => s.open)
   const setOpen = useSettingsUi((s) => s.setOpen)
   const room = useSettingsUi((s) => s.room)
+  const savedTab = useSettingsUi((s) => s.tab)
+  const setTab = useSettingsUi((s) => s.setTab)
+  const tabs = TABS.filter((t) => room || !t.roomOnly)
+  // A room-only tab picked last time falls back to audio outside a room.
+  const tab = tabs.some((t) => t.value === savedTab) ? savedTab : 'audio'
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
         title="Configurações"
-        description={
-          room
-            ? 'Dispositivos, vídeo, notificações e app.'
-            : 'Notificações e app. Valem para todas as salas.'
-        }
+        description={room ? undefined : 'Valem para todas as salas.'}
+        className="h-[min(680px,calc(100vh-4rem))]"
       >
         {open && (
-          <div className="flex flex-col gap-5 overflow-y-auto px-6 pb-6">
-            {room && (
-              <RoomContext.Provider value={room}>
-                <RoomSections />
-              </RoomContext.Provider>
-            )}
-            <NotificationsSection />
-            <AppSection />
-          </div>
+          <Tabs
+            value={tab}
+            onValueChange={(v) => setTab(v as SettingsTab)}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <div className="px-6 pb-4">
+              <TabsList className="flex w-full">
+                {tabs.map(({ value, label, icon: Icon }) => (
+                  <TabsTrigger
+                    key={value}
+                    value={value}
+                    className="flex-auto px-2.5 whitespace-nowrap"
+                  >
+                    <span className="flex items-center justify-center gap-1.5">
+                      <Icon className="size-4 shrink-0" aria-hidden="true" /> {label}
+                    </span>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+            <div className="border-border min-h-0 flex-1 overflow-y-auto border-t px-6 pt-5 pb-6">
+              {room && (
+                <RoomContext.Provider value={room}>
+                  <TabsContent value="profile" className="outline-none">
+                    <ProfileSection />
+                  </TabsContent>
+                  <TabsContent value="video" className="outline-none">
+                    <VideoSection />
+                  </TabsContent>
+                </RoomContext.Provider>
+              )}
+              <TabsContent value="audio" className="outline-none">
+                <AudioSection room={room} />
+              </TabsContent>
+              <TabsContent value="notifications" className="outline-none">
+                <NotificationsSection />
+              </TabsContent>
+              <TabsContent value="app" className="outline-none">
+                <AppSection />
+              </TabsContent>
+            </div>
+          </Tabs>
         )}
       </DialogContent>
     </Dialog>
   )
 }
 
-/** Settings that act on the room the user is in (devices switch live). */
-function RoomSections() {
-  const room = useRoomContext()
+/** The user's name in the room. */
+function ProfileSection() {
   const { localParticipant } = useLocalParticipant()
   const prefs = usePrefs()
-  const cameras = useDevices('videoinput')
-  const mics = useDevices('audioinput')
-  const speakers = useDevices('audiooutput')
   const [name, setName] = useState(prefs.name)
-
-  const switchDevice = async (kind: MediaDeviceKind, id: string) => {
-    const key = kind === 'videoinput' ? 'cameraId' : kind === 'audioinput' ? 'micId' : 'speakerId'
-    prefs.set({ [key]: id })
-    try {
-      await room.switchActiveDevice(kind, id)
-    } catch (error) {
-      console.error(error)
-      toast.error('Não foi possível trocar o dispositivo.')
-    }
-  }
 
   const saveName = async () => {
     const trimmed = name.trim()
@@ -86,88 +137,81 @@ function RoomSections() {
   }
 
   return (
-    <>
-      <section className="flex flex-col gap-3">
-        <h3 className="text-muted text-xs font-semibold tracking-wide uppercase">Você</h3>
-        <Field label="Apelido">
-          <div className="flex gap-2">
-            <Input
-              value={name}
-              maxLength={DISPLAY_NAME_MAX}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && void saveName()}
-            />
-            <Button
-              onClick={() => void saveName()}
-              disabled={!name.trim() || name.trim() === localParticipant.name}
-            >
-              Salvar
-            </Button>
-          </div>
-        </Field>
-      </section>
+    <section className="flex flex-col gap-3">
+      <Field label="Apelido">
+        <div className="flex gap-2">
+          <Input
+            value={name}
+            maxLength={DISPLAY_NAME_MAX}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void saveName()}
+          />
+          <Button
+            onClick={() => void saveName()}
+            disabled={!name.trim() || name.trim() === localParticipant.name}
+          >
+            Salvar
+          </Button>
+        </div>
+      </Field>
+    </section>
+  )
+}
 
-      <section className="flex flex-col gap-3">
-        <h3 className="text-muted text-xs font-semibold tracking-wide uppercase">Dispositivos</h3>
-        <Field label="Câmera">
-          <Select
-            aria-label="Câmera"
-            value={prefs.cameraId ?? cameras[0]?.value}
-            options={cameras}
-            placeholder="Nenhuma câmera encontrada"
-            onValueChange={(id) => void switchDevice('videoinput', id)}
-          />
-        </Field>
-        <Field label="Microfone">
-          <Select
-            aria-label="Microfone"
-            value={prefs.micId ?? mics[0]?.value}
-            options={mics}
-            placeholder="Nenhum microfone encontrado"
-            onValueChange={(id) => void switchDevice('audioinput', id)}
-          />
-        </Field>
-        <Field label="Saída de áudio">
-          <Select
-            aria-label="Saída de áudio"
-            value={prefs.speakerId ?? speakers[0]?.value}
-            options={speakers}
-            placeholder="Padrão do sistema"
-            onValueChange={(id) => void switchDevice('audiooutput', id)}
-          />
-        </Field>
-      </section>
+/** Camera and video settings of the room the user is in (the camera switches live). */
+function VideoSection() {
+  const room = useRoomContext()
+  const prefs = usePrefs()
+  const cameras = useDevices('videoinput')
 
-      <section className="flex flex-col gap-3">
-        <h3 className="text-muted text-xs font-semibold tracking-wide uppercase">Vídeo</h3>
-        <Field
-          label="Codec de vídeo"
-          hint="Vale para o próximo compartilhamento ou câmera que você abrir."
-        >
-          <Select
-            aria-label="Codec de vídeo"
-            value={prefs.videoCodec}
-            options={(Object.keys(CODEC_LABELS) as PreferredCodec[]).map((c) => ({
-              value: c,
-              label: CODEC_LABELS[c],
-            }))}
-            onValueChange={(v) => prefs.set({ videoCodec: v as PreferredCodec })}
-          />
-        </Field>
-        <ToggleRow
-          label="Mostrar minha própria tela"
-          hint="Exibe sua tela compartilhada no palco junto com as outras."
-          checked={prefs.showOwnScreen}
-          onChange={(v) => prefs.set({ showOwnScreen: v })}
+  const switchCamera = async (id: string) => {
+    prefs.set({ cameraId: id })
+    try {
+      await room.switchActiveDevice('videoinput', id)
+    } catch (error) {
+      console.error(error)
+      toast.error('Não foi possível trocar a câmera.')
+    }
+  }
+
+  return (
+    <section className="flex flex-col gap-3">
+      <Field label="Câmera">
+        <Select
+          aria-label="Câmera"
+          value={prefs.cameraId ?? cameras[0]?.value}
+          options={cameras}
+          placeholder="Nenhuma câmera encontrada"
+          onValueChange={(id) => void switchCamera(id)}
         />
-        <ToggleRow
-          label="Mostrar estatísticas nos vídeos"
-          hint="Resolução, fps e taxa de bits de cada vídeo."
-          checked={prefs.showStats}
-          onChange={(v) => prefs.set({ showStats: v })}
+      </Field>
+      <Field
+        label="Codec de vídeo"
+        hint="Vale para o próximo compartilhamento ou câmera que você abrir."
+      >
+        <Select
+          aria-label="Codec de vídeo"
+          value={prefs.videoCodec}
+          options={(Object.keys(CODEC_LABELS) as PreferredCodec[]).map((c) => ({
+            value: c,
+            label: CODEC_LABELS[c],
+          }))}
+          onValueChange={(v) => prefs.set({ videoCodec: v as PreferredCodec })}
         />
-      </section>
-    </>
+      </Field>
+      <ToggleRow
+        label="Mostrar minha própria tela"
+        hint="Exibe sua tela compartilhada no palco junto com as outras."
+        checked={prefs.showOwnScreen}
+        onChange={(v) => prefs.set({ showOwnScreen: v })}
+      />
+      <ToggleRow
+        label="Mostrar estatísticas nos vídeos"
+        hint="Resolução, fps e taxa de bits de cada vídeo."
+        checked={prefs.showStats}
+        onChange={(v) => prefs.set({ showStats: v })}
+      />
+    </section>
   )
 }
 
@@ -177,7 +221,6 @@ function NotificationsSection() {
   const setN = usePrefs((s) => s.setNotifications)
   return (
     <section className="flex flex-col gap-3">
-      <h3 className="text-muted text-xs font-semibold tracking-wide uppercase">Notificações</h3>
       <ToggleRow
         label="Mensagens novas"
         hint="Avisa cada mensagem no chat da sala."
@@ -250,7 +293,6 @@ function AppSection() {
 
   return (
     <section className="flex flex-col gap-3">
-      <h3 className="text-muted text-xs font-semibold tracking-wide uppercase">App</h3>
       <ToggleRow
         label="Ao fechar, continuar rodando na bandeja"
         hint="Fechar a janela não tira você da sala. Para sair de vez, use o ícone do Share perto do relógio."
@@ -269,27 +311,5 @@ function AppSection() {
         </Button>
       </div>
     </section>
-  )
-}
-
-function ToggleRow({
-  label,
-  hint,
-  checked,
-  onChange,
-}: {
-  label: string
-  hint: string
-  checked: boolean
-  onChange: (value: boolean) => void
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div>
-        <p className="text-sm font-medium">{label}</p>
-        <p className="text-muted text-xs">{hint}</p>
-      </div>
-      <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
-    </div>
   )
 }

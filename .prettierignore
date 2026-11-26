@@ -4,3 +4,4 @@ out
 release
 .next
 package-lock.json
+apps/desktop/src/renderer/src/audio/dfn3

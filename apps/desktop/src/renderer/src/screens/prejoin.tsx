@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Field, Input, Select, Tooltip } from '@/components/ui/primitives'
 import { describeMediaError, useDevices } from '@/lib/devices'
 import { copyInvite } from '@/lib/invite'
-import { CAMERA_CAPTURE, MIC_CAPTURE } from '@/lib/media'
+import { CAMERA_CAPTURE, micConstraints } from '@/lib/media'
 import { cn, hueFor, initials } from '@/lib/utils'
 import { roomApi } from '@/lib/chat-api'
 import { useNav, type JoinOptions } from '@/stores/nav'
@@ -72,7 +72,7 @@ function useMicLevel(enabled: boolean, deviceId: string | null) {
     navigator.mediaDevices
       .getUserMedia({
         audio: {
-          ...MIC_CAPTURE,
+          ...micConstraints(),
           deviceId: deviceId ? { exact: deviceId } : undefined,
         } as MediaTrackConstraints,
       })

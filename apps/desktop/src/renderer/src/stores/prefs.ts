@@ -1,3 +1,4 @@
+import type { PttBinding } from '@shared/ipc'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
@@ -47,6 +48,40 @@ export const DEFAULT_NOTIFICATIONS: NotificationPrefs = {
   volume: 0.6,
 }
 
+/** - `ai`: DeepFilterNet3 (WebAssembly, in the app). - `basic`: Chromium's own. */
+export type NoiseSuppression = 'ai' | 'basic' | 'off'
+export type InputMode = 'voice' | 'ptt'
+
+/** Microphone and speakers. Per user: applies to every room. */
+export interface AudioPrefs {
+  noiseSuppression: NoiseSuppression
+  echoCancellation: boolean
+  /** Gain applied to the microphone, 0–2 (100% = 1). */
+  inputVolume: number
+  /** Volume of everyone's voices and shared-screen audio, 0–1. */
+  outputVolume: number
+  inputMode: InputMode
+  /** Voice activity: pick the threshold from the background noise. */
+  autoSensitivity: boolean
+  /** Voice activity threshold in dBFS (-100..0), when not automatic. */
+  sensitivityDb: number
+  pttBinding: PttBinding | null
+  /** How long the mic stays open after the push-to-talk key is released. */
+  pttReleaseMs: number
+}
+
+export const DEFAULT_AUDIO: AudioPrefs = {
+  noiseSuppression: 'ai',
+  echoCancellation: true,
+  inputVolume: 1,
+  outputVolume: 1,
+  inputMode: 'voice',
+  autoSensitivity: true,
+  sensitivityDb: -50,
+  pttBinding: null,
+  pttReleaseMs: 200,
+}
+
 interface PrefsState {
   /** Random per-install id used as the LiveKit identity. */
   identity: string
@@ -67,6 +102,7 @@ interface PrefsState {
   musicVolume: number
   /** Music muted on this computer only (it keeps playing for everyone else). */
   musicMuted: boolean
+  audio: AudioPrefs
   set: (
     partial: Partial<
       Omit<
@@ -77,6 +113,7 @@ interface PrefsState {
         | 'nameRecentRoom'
         | 'updateRecentRoom'
         | 'setNotifications'
+        | 'setAudio'
       >
     >,
   ) => void
@@ -87,6 +124,7 @@ interface PrefsState {
   updateRecentRoom: (id: string, info: RecentRoomInfo) => void
   removeRecentRoom: (id: string) => void
   setNotifications: (partial: Partial<NotificationPrefs>) => void
+  setAudio: (partial: Partial<AudioPrefs>) => void
 }
 
 const MAX_RECENT = 40
@@ -110,7 +148,9 @@ export const usePrefs = create<PrefsState>()(
       notifications: DEFAULT_NOTIFICATIONS,
       musicVolume: 0.7,
       musicMuted: false,
+      audio: DEFAULT_AUDIO,
       set: (partial) => set(partial),
+      setAudio: (partial) => set((s) => ({ audio: { ...s.audio, ...partial } })),
       setNotifications: (partial) =>
         set((s) => ({ notifications: { ...s.notifications, ...partial } })),
       addRecentRoom: (id, info = {}) =>
@@ -146,12 +186,13 @@ export const usePrefs = create<PrefsState>()(
       name: 'share-prefs',
       version: 1,
       storage: createJSONStorage(() => localStorage),
-      // Saved prefs from older versions lack newer notification options: fill in defaults.
+      // Saved prefs from older versions lack newer options: fill in defaults.
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<PrefsState>
         return {
           ...current,
           ...saved,
+          audio: { ...DEFAULT_AUDIO, ...saved.audio },
           notifications: {
             ...DEFAULT_NOTIFICATIONS,
             ...saved.notifications,

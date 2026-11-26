@@ -18,7 +18,8 @@
   },
   "dependencies": {
     "electron-updater": "^6.8.11",
-    "loopback-capture": "4.0.0"
+    "loopback-capture": "4.0.0",
+    "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
     "@electron/asar": "^4.3.2",

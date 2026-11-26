@@ -18,11 +18,12 @@ import {
 import { Copy, Loader2, RotateCw, Signal, SignalLow, SignalMedium, WifiOff } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { useRoomAudio } from '@/audio/use-room-audio'
 import { TitleBar } from '@/components/title-bar'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/primitives'
 import { copyInvite } from '@/lib/invite'
-import { CAMERA_CAPTURE, cameraPublishOptions, MIC_CAPTURE, ROOM_OPTIONS } from '@/lib/media'
+import { CAMERA_CAPTURE, cameraPublishOptions, micCaptureOptions, ROOM_OPTIONS } from '@/lib/media'
 import { setChatAuth } from '@/lib/chat-api'
 import { AudioOverlay } from '@/music/audio-overlay'
 import { takeMusicSnapshot, type MusicSnapshot } from '@/music/music-store'
@@ -249,7 +250,7 @@ export function RoomScreen({
         const withCamera = resume ? resume.camera : prefs.joinWithCamera
         if (withMic) {
           room.localParticipant
-            .setMicrophoneEnabled(true, { ...MIC_CAPTURE, deviceId: prefs.micId ?? undefined })
+            .setMicrophoneEnabled(true, micCaptureOptions())
             .catch(() => toast.error('Não foi possível ligar o microfone.'))
         }
         if (withCamera) {
@@ -362,6 +363,7 @@ function ConnectedRoom({
   useMusicTransport(room, roomId, musicSeed, onMusicCarry)
   useResumeProvider(roomId, room, controller)
   useRoomNameSync(room, roomId)
+  useRoomAudio(room)
 
   // The app-wide settings dialog shows this room's devices while connected.
   useEffect(() => {

@@ -8,7 +8,9 @@ import {
   type TrackPublishOptions,
   type VideoCaptureOptions,
 } from 'livekit-client'
-import type { PreferredCodec, ScreenQuality } from '@/stores/prefs'
+import { effectiveNoiseSuppression } from '@/audio/mic-chain'
+import { MicTrackProcessor } from '@/audio/mic-processor'
+import { usePrefs, type PreferredCodec, type ScreenQuality } from '@/stores/prefs'
 
 export interface ScreenPreset {
   label: string
@@ -72,10 +74,24 @@ export function cameraPublishOptions(codec: PreferredCodec): TrackPublishOptions
   }
 }
 
-export const MIC_CAPTURE: AudioCaptureOptions = {
-  echoCancellation: true,
-  noiseSuppression: true,
-  autoGainControl: true,
+/**
+ * What getUserMedia should do for the microphone, from the audio settings.
+ * Chromium's own noise suppression only runs in `basic` mode: with `ai` the
+ * mic chain (DeepFilterNet3) does it, and doing both muffles the voice.
+ */
+export function micConstraints(): AudioCaptureOptions {
+  const { micId, audio } = usePrefs.getState()
+  return {
+    deviceId: micId ?? undefined,
+    echoCancellation: audio.echoCancellation,
+    noiseSuppression: effectiveNoiseSuppression(audio) === 'basic',
+    autoGainControl: true,
+  }
+}
+
+/** Options to turn the room microphone on: constraints plus the mic chain. */
+export function micCaptureOptions(): AudioCaptureOptions {
+  return { ...micConstraints(), processor: new MicTrackProcessor() }
 }
 
 export const SCREEN_AUDIO_PUBLISH: TrackPublishOptions = {
@@ -92,7 +108,7 @@ export const ROOM_OPTIONS: RoomOptions = {
   dynacast: true,
   disconnectOnPageLeave: true,
   videoCaptureDefaults: CAMERA_CAPTURE,
-  audioCaptureDefaults: MIC_CAPTURE,
+  audioCaptureDefaults: { echoCancellation: true, noiseSuppression: false, autoGainControl: true },
   publishDefaults: {
     videoCodec: 'h264',
     screenShareEncoding: SCREEN_PRESETS.motion.publish.screenShareEncoding,
