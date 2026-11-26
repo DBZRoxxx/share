@@ -150,7 +150,7 @@ export function Select({
               <SelectPrimitive.Item
                 key={o.value}
                 value={o.value}
-                className="data-[highlighted]:bg-surface-3 relative flex cursor-default items-center rounded-lg py-2 pr-8 pl-3 text-sm outline-none select-none"
+                className="data-[highlighted]:bg-surface-3 relative flex items-center rounded-lg py-2 pr-8 pl-3 text-sm outline-none select-none"
               >
                 <SelectPrimitive.ItemText>{o.label}</SelectPrimitive.ItemText>
                 <SelectPrimitive.ItemIndicator className="absolute right-2.5">
@@ -280,7 +280,7 @@ export function MenuItem({ className, ...props }: ComponentProps<typeof MenuPrim
   return (
     <MenuPrimitive.Item
       className={cn(
-        'data-[highlighted]:bg-surface-3 [&_svg]:text-muted flex cursor-default items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none select-none data-[disabled]:opacity-50 [&_svg]:size-4',
+        'data-[highlighted]:bg-surface-3 [&_svg]:text-muted flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none select-none data-[disabled]:opacity-50 [&_svg]:size-4',
         className,
       )}
       {...props}
@@ -300,7 +300,7 @@ export function MenuRadioItem({
   return (
     <MenuPrimitive.RadioItem
       className={cn(
-        'data-[highlighted]:bg-surface-3 relative flex cursor-default items-center rounded-lg py-2 pr-3 pl-8 text-sm outline-none select-none',
+        'data-[highlighted]:bg-surface-3 relative flex items-center rounded-lg py-2 pr-3 pl-8 text-sm outline-none select-none',
         className,
       )}
       {...props}
