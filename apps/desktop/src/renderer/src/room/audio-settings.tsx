@@ -10,9 +10,9 @@ import { Field, Kbd, Select, Slider, Switch } from '@/components/ui/primitives'
 import { useDevices } from '@/lib/devices'
 import { cn } from '@/lib/utils'
 import {
+  CLEAN_SPEECH_MAX_DB,
+  CLEAN_SPEECH_MIN_DB,
   DEFAULT_AUDIO,
-  NOISE_STRENGTH_MAX_DB,
-  NOISE_STRENGTH_MIN_DB,
   usePrefs,
   type InputMode,
   type NoiseSuppression,
@@ -131,7 +131,7 @@ export function AudioSection({ room }: { room: Room | null }) {
         />
       </Field>
       <NoiseStatus />
-      {audio.noiseSuppression === 'ai' && <NoiseStrength />}
+      {audio.noiseSuppression === 'ai' && <CleanSpeech />}
       <ToggleRow
         label="Cancelamento de eco"
         hint="Evita que sua voz volte para os outros pelos seus alto-falantes. Com fone de ouvido, pode desligar."
@@ -384,34 +384,49 @@ function NoiseStatus() {
   )
 }
 
-/** How much DeepFilterNet may remove: lower sounds more natural on loud speech. */
-function NoiseStrength() {
-  const strength = usePrefs((s) => s.audio.noiseStrengthDb)
+/**
+ * Above this SNR estimate DeepFilterNet leaves the frame alone. The slider is
+ * inverted: more preservation means a lower threshold.
+ */
+function CleanSpeech() {
+  const cleanDb = usePrefs((s) => s.audio.cleanSpeechDb)
   const setAudio = usePrefs((s) => s.setAudio)
   const dfnFailed = useMic((s) => s.dfn === 'error')
+  const testing = useMic((s) => s.testing)
+  const lsnr = useMic((s) => s.level?.lsnrDb ?? null)
   if (dfnFailed) return null
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between text-sm">
-        <span className="font-medium">Intensidade da supressão</span>
-        <span className="text-muted tabular-nums">{Math.round(strength)} dB</span>
+        <span className="font-medium">Preservação da voz</span>
+        <span className="text-muted tabular-nums">
+          {cleanDb >= CLEAN_SPEECH_MAX_DB ? 'Desligada' : `intacta acima de ${cleanDb} dB`}
+        </span>
       </div>
       <div className="flex items-center gap-3">
-        <span className="text-muted text-xs">Suave</span>
+        <span className="text-muted text-xs">Menos</span>
         <Slider
-          aria-label="Intensidade da supressão"
-          thumbLabel="Intensidade da supressão"
-          min={NOISE_STRENGTH_MIN_DB}
-          max={NOISE_STRENGTH_MAX_DB}
+          aria-label="Preservação da voz"
+          thumbLabel="Preservação da voz"
+          inverted
+          min={CLEAN_SPEECH_MIN_DB}
+          max={CLEAN_SPEECH_MAX_DB}
           step={1}
-          value={[strength]}
-          onValueChange={([v]) => setAudio({ noiseStrengthDb: v ?? DEFAULT_AUDIO.noiseStrengthDb })}
+          value={[cleanDb]}
+          onValueChange={([v]) => setAudio({ cleanSpeechDb: v ?? DEFAULT_AUDIO.cleanSpeechDb })}
         />
-        <span className="text-muted text-xs">Forte</span>
+        <span className="text-muted text-xs">Mais</span>
       </div>
       <span className="text-muted text-xs">
-        20 dB é o recomendado. Se a voz cortar ou ficar robótica, diminua; se sobrar ruído, aumente.
+        Quando a IA estima que sua voz está bem acima do ruído (SNR), ela passa sem filtro e mantém
+        todo o timbre. Se a voz ficar abafada, aumente; se o teclado vazar enquanto fala, diminua.
       </span>
+      {testing && lsnr !== null && (
+        <span className="text-muted text-xs tabular-nums">
+          SNR estimada agora: {Math.round(lsnr)} dB —{' '}
+          {lsnr > cleanDb ? 'passando intacta' : 'sendo filtrada'}
+        </span>
+      )}
     </div>
   )
 }

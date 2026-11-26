@@ -13,9 +13,10 @@ import './worklet-shims'
 import {
   df_create,
   df_get_frame_length,
+  df_get_last_lsnr,
   df_process_frame,
-  df_set_atten_lim,
   df_set_post_filter_beta,
+  df_set_thresholds,
   initSync,
 } from './dfn3/df'
 import { Gate, Limiter, rms, type GateParams } from './gate-logic'
@@ -35,6 +36,14 @@ declare class AudioWorkletProcessor {
 /** Meter updates, in render blocks (~30 per second). */
 const REPORT_EVERY = Math.max(1, Math.round(sampleRate / 128 / 30))
 
+/**
+ * Maximum attenuation of the noise, dB (100 = remove it entirely). libDF
+ * mixes `10^(-dB/20)` of the original back into each frame (10% at 20 dB),
+ * so speech the model misjudges as noise isn't cut and its metallic artifacts
+ * on loud speech are masked.
+ */
+const ATTEN_LIMIT_DB = 20
+
 class Denoiser {
   private readonly frame: Float32Array
   private filled = 0
@@ -43,6 +52,8 @@ class Denoiser {
   private write = 0
   private queued = 0
   private primed = false
+  private lsnrSum = 0
+  private lsnrFrames = 0
 
   constructor(
     private readonly state: number,
@@ -53,13 +64,23 @@ class Denoiser {
   }
 
   /**
-   * Maximum attenuation of the noise, dB (100 = remove it entirely). libDF
-   * mixes `10^(-dB/20)` of the original back into each frame: lower values
-   * keep a trace of it, so speech the model misjudges as noise isn't cut and
-   * its metallic artifacts on loud speech are masked.
+   * libDF picks per frame from its SNR estimate: below -10 dB it is only noise
+   * (zeroed), above `cleanDb` it is clean speech (left untouched), in between
+   * it is filtered. Deep filtering runs on every filtered frame: libDF's
+   * default skips it from 20 dB up, leaving only the coarse per-band gains,
+   * and that band of SNR is where normal speech sits — it took 1–3 dB off the
+   * voice's harmonics (the "muffled" sound) for no noise gain.
    */
-  setAttenLimit(db: number) {
-    df_set_atten_lim(this.state, db)
+  setCleanSpeech(cleanDb: number) {
+    df_set_thresholds(this.state, -10, cleanDb, cleanDb)
+  }
+
+  /** Mean SNR estimate since the last call, dB; null if no frame ran. */
+  takeLsnr(): number | null {
+    if (!this.lsnrFrames) return null
+    const mean = this.lsnrSum / this.lsnrFrames
+    this.lsnrSum = this.lsnrFrames = 0
+    return mean
   }
 
   reset() {
@@ -74,6 +95,8 @@ class Denoiser {
       if (this.filled === this.frameLength) {
         this.filled = 0
         const clean = df_process_frame(this.state, this.frame)
+        this.lsnrSum += df_get_last_lsnr(this.state)
+        this.lsnrFrames++
         for (let j = 0; j < clean.length; j++) {
           this.queue[this.write] = clean[j] ?? 0
           this.write = (this.write + 1) % this.queue.length
@@ -101,7 +124,7 @@ class MicProcessor extends AudioWorkletProcessor {
   private params: MicParams = {
     gain: 1,
     ai: false,
-    attenLimitDb: 20,
+    cleanSpeechDb: 20,
     mode: 'voice',
     thresholdDb: -50,
     autoThreshold: true,
@@ -131,8 +154,8 @@ class MicProcessor extends AudioWorkletProcessor {
         const previous = this.params
         this.params = data.params
         if (this.params.ai !== previous.ai) this.denoiser?.reset()
-        if (this.params.attenLimitDb !== previous.attenLimitDb)
-          this.denoiser?.setAttenLimit(this.params.attenLimitDb)
+        if (this.params.cleanSpeechDb !== previous.cleanSpeechDb)
+          this.denoiser?.setCleanSpeech(this.params.cleanSpeechDb)
         break
       }
       case 'ptt':
@@ -142,11 +165,12 @@ class MicProcessor extends AudioWorkletProcessor {
         if (this.denoiser || this.dfnFailed) return
         try {
           initSync(data.module)
-          const state = df_create(new Uint8Array(data.model), this.params.attenLimitDb)
+          const state = df_create(new Uint8Array(data.model), ATTEN_LIMIT_DB)
           // Post-filter off (libDF's default today, pinned here): it trades
           // speech fidelity for more suppression.
           df_set_post_filter_beta(state, 0)
           this.denoiser = new Denoiser(state, df_get_frame_length(state))
+          this.denoiser.setCleanSpeech(this.params.cleanSpeechDb)
           this.post({ type: 'dfn-ready' })
         } catch (error) {
           this.dfnFailed = true
@@ -213,6 +237,7 @@ class MicProcessor extends AudioWorkletProcessor {
         db: this.gate.levelDb,
         open: this.gate.open,
         thresholdDb: this.gate.threshold(gateParams),
+        lsnrDb: this.params.ai ? (this.denoiser?.takeLsnr() ?? null) : null,
       })
     }
     return true

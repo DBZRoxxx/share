@@ -21,7 +21,11 @@ if [ -z "$SRC" ]; then
 fi
 cd "$SRC"
 git checkout -q "$COMMIT"
-git checkout -q -- libDF/Cargo.toml
+git checkout -q -- libDF/Cargo.toml libDF/src/wasm.rs
+
+# Expose what upstream's WASM API leaves out: the local SNR thresholds (so
+# clean speech can skip processing) and the last frame's SNR estimate.
+git apply --whitespace=nowarn "$HERE/scripts/dfn3-wasm.patch"
 
 # The model ships as its own file (fetched once, cached by the app), so keep it
 # out of the WASM binary: drop "default-model" from the "wasm" feature.
@@ -31,7 +35,7 @@ sed -i '/^wasm = \[/,/^\]/{/"default-model",/d}' libDF/Cargo.toml
 RUSTFLAGS="-C target-feature=+simd128" \
   wasm-pack build libDF --release --target web --no-typescript --no-pack --features wasm
 
-git checkout -q -- libDF/Cargo.toml
+git checkout -q -- libDF/Cargo.toml libDF/src/wasm.rs
 
 mkdir -p "$OUT"
 cp libDF/pkg/df.js "$OUT/df.js"

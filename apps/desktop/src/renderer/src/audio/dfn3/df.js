@@ -109,6 +109,32 @@ export function df_set_post_filter_beta(st, beta) {
     wasm.df_set_post_filter_beta(st, beta);
 }
 
+/**
+* Set the local SNR thresholds that decide how much of each frame is processed.
+*
+* Args:
+*     - min_db: Below this, the frame is only noise and gets a zero mask.
+*     - max_erb_db: Above this, the frame is clean speech and is left untouched.
+*     - max_df_db: Above this (and up to max_erb_db), only the ERB gains run, not deep filtering.
+* @param {number} st
+* @param {number} min_db
+* @param {number} max_erb_db
+* @param {number} max_df_db
+*/
+export function df_set_thresholds(st, min_db, max_erb_db, max_df_db) {
+    wasm.df_set_thresholds(st, min_db, max_erb_db, max_df_db);
+}
+
+/**
+* Local SNR estimate of the last processed frame, in dB.
+* @param {number} st
+* @returns {number}
+*/
+export function df_get_last_lsnr(st) {
+    const ret = wasm.df_get_last_lsnr(st);
+    return ret;
+}
+
 let cachedFloat32Memory0 = null;
 
 function getFloat32Memory0() {

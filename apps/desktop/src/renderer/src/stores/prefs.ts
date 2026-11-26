@@ -56,11 +56,11 @@ export type InputMode = 'voice' | 'ptt'
 export interface AudioPrefs {
   noiseSuppression: NoiseSuppression
   /**
-   * How much DeepFilterNet may remove, dB (6–40, 20 recommended). Lower keeps
-   * a little of the original sound, so the voice isn't cut and loud speech
-   * doesn't sound robotic; above ~40 dB the difference can't be heard.
+   * DeepFilterNet leaves frames alone when it estimates their SNR above this,
+   * dB (10–35): speech in a quiet room keeps all its tone, and only frames
+   * with real noise get filtered. 35 filters everything.
    */
-  noiseStrengthDb: number
+  cleanSpeechDb: number
   echoCancellation: boolean
   /** Chromium's automatic gain control on the capture (never with `ai`). */
   autoGainControl: boolean
@@ -80,7 +80,7 @@ export interface AudioPrefs {
 
 export const DEFAULT_AUDIO: AudioPrefs = {
   noiseSuppression: 'ai',
-  noiseStrengthDb: 20,
+  cleanSpeechDb: 20,
   echoCancellation: true,
   autoGainControl: true,
   inputVolume: 1,
@@ -139,8 +139,8 @@ interface PrefsState {
 
 const MAX_RECENT = 40
 
-export const NOISE_STRENGTH_MIN_DB = 6
-export const NOISE_STRENGTH_MAX_DB = 40
+export const CLEAN_SPEECH_MIN_DB = 10
+export const CLEAN_SPEECH_MAX_DB = 35
 
 export const usePrefs = create<PrefsState>()(
   persist(
@@ -197,21 +197,18 @@ export const usePrefs = create<PrefsState>()(
     }),
     {
       name: 'share-prefs',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
-      // v2: the suppression strength went from 10–100 dB (default 30) to
-      // 6–40 dB (default 20). The old default moves to the new one.
-      migrate: (persisted, version) => {
+      // v3: the suppression strength setting is gone (fixed at 20 dB in the
+      // mic chain): drop it from saved prefs. Without a migrate function,
+      // older saved prefs would be thrown away.
+      migrate: (persisted) => {
         const saved = (persisted ?? {}) as Partial<PrefsState>
-        if (version < 2 && saved.audio && typeof saved.audio.noiseStrengthDb === 'number') {
-          const db = saved.audio.noiseStrengthDb
-          saved.audio = {
-            ...saved.audio,
-            noiseStrengthDb:
-              db === 30
-                ? DEFAULT_AUDIO.noiseStrengthDb
-                : Math.min(NOISE_STRENGTH_MAX_DB, Math.max(NOISE_STRENGTH_MIN_DB, db)),
+        if (saved.audio) {
+          const { noiseStrengthDb: _dropped, ...audio } = saved.audio as AudioPrefs & {
+            noiseStrengthDb?: number
           }
+          saved.audio = audio
         }
         return saved as PrefsState
       },

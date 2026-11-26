@@ -15,7 +15,6 @@ export function useMicTest() {
   const [error, setError] = useState<string | null>(null)
   // A new capture is needed when any of these change.
   const micId = usePrefs((s) => s.micId)
-  const echo = usePrefs((s) => s.audio.echoCancellation)
   const agc = usePrefs((s) => s.audio.autoGainControl)
   const noise = usePrefs((s) => s.audio.noiseSuppression)
   const dfnFailed = useMic((s) => s.dfn === 'error')
@@ -37,6 +36,10 @@ export function useMicTest() {
       .getUserMedia({
         audio: {
           ...constraints,
+          // Echo cancellation can't work here: what plays back is your own
+          // voice, ~30 ms late, so it takes it for echo and thins it out
+          // ("helium voice") until it gives up. In a call it only sees others.
+          echoCancellation: false,
           deviceId: constraints.deviceId ? { exact: constraints.deviceId } : undefined,
         } as MediaTrackConstraints,
       })
@@ -64,7 +67,7 @@ export function useMicTest() {
       stream?.getTracks().forEach((t) => t.stop())
       useMic.setState({ testing: false, level: null })
     }
-  }, [running, micId, echo, agc, noise, dfnFailed])
+  }, [running, micId, agc, noise, dfnFailed])
 
   useEffect(() => {
     if (playerRef.current) playerRef.current.volume = Math.min(1, outputVolume)

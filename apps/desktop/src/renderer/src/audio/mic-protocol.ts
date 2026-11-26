@@ -9,8 +9,8 @@ export interface MicParams {
   gain: number
   /** Run DeepFilterNet3 (once it is loaded). */
   ai: boolean
-  /** DeepFilterNet's maximum attenuation, dB. */
-  attenLimitDb: number
+  /** Frames whose estimated SNR is above this, dB, pass through untouched. */
+  cleanSpeechDb: number
   mode: GateMode
   thresholdDb: number
   autoThreshold: boolean
@@ -29,6 +29,8 @@ export interface MicLevel {
   open: boolean
   /** Threshold in effect (the automatic one, when automatic), dBFS. */
   thresholdDb: number
+  /** DeepFilterNet's SNR estimate over the last report, dB (null when it isn't running). */
+  lsnrDb: number | null
 }
 
 export type MicOutMessage =

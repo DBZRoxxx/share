@@ -1,0 +1,58 @@
+diff --git a/libDF/src/wasm.rs b/libDF/src/wasm.rs
+index 2e02095..59fe87c 100644
+--- a/libDF/src/wasm.rs
++++ b/libDF/src/wasm.rs
+@@ -6,7 +6,7 @@ use wasm_bindgen::prelude::*;
+ use crate::tract::*;
+ 
+ #[wasm_bindgen]
+-pub struct DFState(crate::tract::DfTract);
++pub struct DFState(crate::tract::DfTract, f32);
+ 
+ #[wasm_bindgen]
+ impl DFState {
+@@ -15,7 +15,7 @@ impl DFState {
+         let df_params = DfParams::from_bytes(model_bytes).expect("Could not load model from path");
+         let m =
+             DfTract::new(df_params, &r_params).expect("Could not initialize DeepFilter runtime.");
+-        DFState(m)
++        DFState(m, -15.)
+     }
+     fn boxed(self) -> Box<DFState> {
+         Box::new(self)
+@@ -67,6 +67,27 @@ pub unsafe fn df_set_post_filter_beta(st: *mut DFState, beta: f32) {
+     state.0.set_pf_beta(beta)
+ }
+ 
++/// Set the local SNR thresholds that decide how much of each frame is processed.
++///
++/// Args:
++///     - min_db: Below this, the frame is only noise and gets a zero mask.
++///     - max_erb_db: Above this, the frame is clean speech and is left untouched.
++///     - max_df_db: Above this (and up to max_erb_db), only the ERB gains run, not deep filtering.
++#[wasm_bindgen]
++pub unsafe fn df_set_thresholds(st: *mut DFState, min_db: f32, max_erb_db: f32, max_df_db: f32) {
++    let state = st.as_mut().expect("Invalid pointer");
++    state.0.min_db_thresh = min_db;
++    state.0.max_db_erb_thresh = max_erb_db;
++    state.0.max_db_df_thresh = max_df_db;
++}
++
++/// Local SNR estimate of the last processed frame, in dB.
++#[wasm_bindgen]
++pub unsafe fn df_get_last_lsnr(st: *mut DFState) -> f32 {
++    let state = st.as_mut().expect("Invalid pointer");
++    state.1
++}
++
+ /// Processes a chunk of samples.
+ ///
+ /// Args:
+@@ -83,6 +104,6 @@ pub unsafe fn df_process_frame(st: *mut DFState, input: &[f32]) -> js_sys::Float
+ 
+     let mut output = Array2::zeros((1, state.0.hop_size));
+     let output_view = output.view_mut();
+-    let _lsnr = state.0.process(input, output_view).expect("Failed to process DF frame");
++    state.1 = state.0.process(input, output_view).expect("Failed to process DF frame");
+     js_sys::Float32Array::from(output.as_slice().unwrap())
+ }

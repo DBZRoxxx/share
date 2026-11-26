@@ -97,7 +97,7 @@ function paramsFor(audio: AudioPrefs, test: boolean): MicParams {
   return {
     gain: audio.inputVolume,
     ai: audio.noiseSuppression === 'ai',
-    attenLimitDb: audio.noiseStrengthDb,
+    cleanSpeechDb: audio.cleanSpeechDb,
     // The mic test lets you hear yourself without holding the key.
     mode: usesPushToTalk(audio) ? (test ? 'open' : 'ptt') : 'voice',
     thresholdDb: audio.sensitivityDb,
@@ -168,7 +168,14 @@ export async function createMicChain(
     const data = event.data
     if (data.type === 'level') {
       if (reportsLevel())
-        useMic.setState({ level: { db: data.db, open: data.open, thresholdDb: data.thresholdDb } })
+        useMic.setState({
+          level: {
+            db: data.db,
+            open: data.open,
+            thresholdDb: data.thresholdDb,
+            lsnrDb: data.lsnrDb,
+          },
+        })
     } else if (data.type === 'dfn-ready') {
       useMic.setState({ dfn: 'ready' })
     } else {
