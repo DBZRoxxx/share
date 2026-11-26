@@ -88,7 +88,7 @@ export function micConstraints(): AudioCaptureOptions {
     deviceId: micId ?? undefined,
     echoCancellation: audio.echoCancellation,
     noiseSuppression: effectiveNoiseSuppression(audio) === 'basic',
-    autoGainControl: true,
+    autoGainControl: audio.autoGainControl,
   }
 }
 

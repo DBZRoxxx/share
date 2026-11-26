@@ -54,6 +54,43 @@ export function autoThresholdFor(noiseFloorDb: number): number {
   return Math.min(AUTO_MAX_DB, Math.max(AUTO_MIN_DB, noiseFloorDb + AUTO_MARGIN_DB))
 }
 
+/** Peak ceiling of the limiter (−1 dBFS), below Opus's and the clamp's 0 dBFS. */
+export const LIMITER_CEILING = 10 ** (-1 / 20)
+const LIMITER_RELEASE_MS = 80
+
+/**
+ * Peak limiter: keeps loud speech (or a volume above 100%) under the ceiling
+ * by turning it down smoothly, instead of the hard clipping that makes a
+ * shouted voice sound harsh. Instant attack, exponential release.
+ */
+export class Limiter {
+  /** Gain applied to the last sample, 0..1. */
+  gain = 1
+  private readonly releaseCoef: number
+
+  constructor(
+    sampleRate: number,
+    private readonly ceiling = LIMITER_CEILING,
+  ) {
+    this.releaseCoef = Math.exp(-1 / ((LIMITER_RELEASE_MS / 1000) * sampleRate))
+  }
+
+  /** Limits `samples` in place. */
+  process(samples: Float32Array) {
+    const { ceiling, releaseCoef } = this
+    let gain = this.gain
+    for (let i = 0; i < samples.length; i++) {
+      const x = samples[i] ?? 0
+      const peak = Math.abs(x)
+      const target = peak > ceiling ? ceiling / peak : 1
+      // Down at once, back up slowly; never above what this sample allows.
+      gain = target < gain ? target : target + (gain - target) * releaseCoef
+      samples[i] = x * gain
+    }
+    this.gain = gain
+  }
+}
+
 export class Gate {
   /** Smoothed level of the signal, dBFS (what the meter shows). */
   levelDb = MIN_DB

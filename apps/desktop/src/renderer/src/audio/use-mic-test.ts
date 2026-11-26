@@ -16,6 +16,7 @@ export function useMicTest() {
   // A new capture is needed when any of these change.
   const micId = usePrefs((s) => s.micId)
   const echo = usePrefs((s) => s.audio.echoCancellation)
+  const agc = usePrefs((s) => s.audio.autoGainControl)
   const noise = usePrefs((s) => s.audio.noiseSuppression)
   const dfnFailed = useMic((s) => s.dfn === 'error')
   const speakerId = usePrefs((s) => s.speakerId)
@@ -63,7 +64,7 @@ export function useMicTest() {
       stream?.getTracks().forEach((t) => t.stop())
       useMic.setState({ testing: false, level: null })
     }
-  }, [running, micId, echo, noise, dfnFailed])
+  }, [running, micId, echo, agc, noise, dfnFailed])
 
   useEffect(() => {
     if (playerRef.current) playerRef.current.volume = Math.min(1, outputVolume)

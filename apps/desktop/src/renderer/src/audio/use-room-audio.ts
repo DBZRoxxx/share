@@ -5,9 +5,13 @@ import { micConstraints } from '@/lib/media'
 import { usePrefs } from '@/stores/prefs'
 import { useMic } from './mic-state'
 
-/** Echo cancellation and Chromium's noise suppression are capture settings: re-open the mic. */
+/**
+ * Echo cancellation, gain control and Chromium's noise suppression are capture
+ * settings: re-open the mic.
+ */
 function useCaptureSettings(room: Room) {
   const echo = usePrefs((s) => s.audio.echoCancellation)
+  const agc = usePrefs((s) => s.audio.autoGainControl)
   const noise = usePrefs((s) => s.audio.noiseSuppression)
   // A failed DeepFilterNet falls back to Chromium's suppression.
   const dfnFailed = useMic((s) => s.dfn === 'error')
@@ -21,14 +25,15 @@ function useCaptureSettings(room: Room) {
     const current = track.getSourceTrackSettings()
     if (
       current.echoCancellation === wanted.echoCancellation &&
-      current.noiseSuppression === wanted.noiseSuppression
+      current.noiseSuppression === wanted.noiseSuppression &&
+      current.autoGainControl === wanted.autoGainControl
     )
       return
     track.restartTrack(wanted).catch((error: unknown) => {
       console.error('[mic] could not apply the new settings', error)
       toast.error('Não foi possível aplicar a configuração ao microfone.')
     })
-  }, [room, echo, noise, dfnFailed])
+  }, [room, echo, agc, noise, dfnFailed])
 }
 
 /** Listens for the push-to-talk binding (globally, through the main process) while in the room. */

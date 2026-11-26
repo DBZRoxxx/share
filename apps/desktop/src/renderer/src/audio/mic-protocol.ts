@@ -9,6 +9,8 @@ export interface MicParams {
   gain: number
   /** Run DeepFilterNet3 (once it is loaded). */
   ai: boolean
+  /** DeepFilterNet's maximum attenuation, dB. */
+  attenLimitDb: number
   mode: GateMode
   thresholdDb: number
   autoThreshold: boolean

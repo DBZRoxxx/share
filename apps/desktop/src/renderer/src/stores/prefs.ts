@@ -55,7 +55,14 @@ export type InputMode = 'voice' | 'ptt'
 /** Microphone and speakers. Per user: applies to every room. */
 export interface AudioPrefs {
   noiseSuppression: NoiseSuppression
+  /**
+   * How much DeepFilterNet may remove, dB (10–100). Lower keeps a little of
+   * the original sound, which hides the robotic artifacts on loud speech.
+   */
+  noiseStrengthDb: number
   echoCancellation: boolean
+  /** Chromium's automatic gain control on the capture. */
+  autoGainControl: boolean
   /** Gain applied to the microphone, 0–2 (100% = 1). */
   inputVolume: number
   /** Volume of everyone's voices and shared-screen audio, 0–1. */
@@ -72,7 +79,9 @@ export interface AudioPrefs {
 
 export const DEFAULT_AUDIO: AudioPrefs = {
   noiseSuppression: 'ai',
+  noiseStrengthDb: 30,
   echoCancellation: true,
+  autoGainControl: true,
   inputVolume: 1,
   outputVolume: 1,
   inputMode: 'voice',

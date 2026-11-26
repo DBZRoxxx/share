@@ -3,6 +3,8 @@ import {
   AUTO_MAX_DB,
   AUTO_MIN_DB,
   Gate,
+  LIMITER_CEILING,
+  Limiter,
   MIN_DB,
   VOICE_HOLD_MS,
   autoThresholdFor,
@@ -126,4 +128,32 @@ describe('push-to-talk', () => {
 it('always transmits in open mode', () => {
   const gate = feed(new Gate(RATE), MIN_DB, 50, voice({ mode: 'open' }))
   expect(gate.open).toBe(true)
+})
+
+describe('Limiter', () => {
+  const sine = (amplitude: number, length: number) =>
+    Float32Array.from({ length }, (_, i) => amplitude * Math.sin((2 * Math.PI * 220 * i) / RATE))
+
+  it('leaves a signal under the ceiling untouched', () => {
+    const input = sine(0.5, BLOCK * 4)
+    const out = input.slice()
+    new Limiter(RATE).process(out)
+    expect(out).toEqual(input)
+  })
+
+  it('keeps loud peaks under the ceiling', () => {
+    const out = sine(2, BLOCK * 40)
+    new Limiter(RATE).process(out)
+    const peak = out.reduce((m, v) => Math.max(m, Math.abs(v)), 0)
+    expect(peak).toBeLessThanOrEqual(LIMITER_CEILING + 1e-6)
+    expect(peak).toBeGreaterThan(LIMITER_CEILING * 0.95)
+  })
+
+  it('recovers its gain once the voice quiets down', () => {
+    const limiter = new Limiter(RATE)
+    limiter.process(sine(2, BLOCK * 10))
+    expect(limiter.gain).toBeLessThan(0.6)
+    limiter.process(sine(0.1, RATE)) // one second of quiet speech
+    expect(limiter.gain).toBeGreaterThan(0.99)
+  })
 })

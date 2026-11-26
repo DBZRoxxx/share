@@ -121,11 +121,18 @@ export function AudioSection({ room }: { room: Room | null }) {
         />
       </Field>
       <NoiseStatus />
+      {audio.noiseSuppression === 'ai' && <NoiseStrength />}
       <ToggleRow
         label="Cancelamento de eco"
         hint="Evita que sua voz volte para os outros pelos seus alto-falantes. Com fone de ouvido, pode desligar."
         checked={audio.echoCancellation}
         onChange={(v) => setAudio({ echoCancellation: v })}
+      />
+      <ToggleRow
+        label="Controle automático de ganho"
+        hint="Ajusta o volume do microfone sozinho. Se sua voz estoura ao falar alto, desligue e baixe o volume do microfone no Windows."
+        checked={audio.autoGainControl}
+        onChange={(v) => setAudio({ autoGainControl: v })}
       />
     </section>
   )
@@ -359,6 +366,40 @@ function NoiseStatus() {
         ? 'Carregando o modelo de IA…'
         : 'Remove teclado, ventilador e barulho de fundo, mantendo só a sua voz.'}
     </p>
+  )
+}
+
+/** How much DeepFilterNet may remove: lower sounds more natural on loud speech. */
+function NoiseStrength() {
+  const strength = usePrefs((s) => s.audio.noiseStrengthDb)
+  const setAudio = usePrefs((s) => s.setAudio)
+  const dfnFailed = useMic((s) => s.dfn === 'error')
+  if (dfnFailed) return null
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between text-sm">
+        <span className="font-medium">Intensidade da supressão</span>
+        <span className="text-muted tabular-nums">
+          {strength >= 100 ? 'Máxima' : `${Math.round(strength)} dB`}
+        </span>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-muted text-xs">Suave</span>
+        <Slider
+          aria-label="Intensidade da supressão"
+          thumbLabel="Intensidade da supressão"
+          min={10}
+          max={100}
+          step={1}
+          value={[strength]}
+          onValueChange={([v]) => setAudio({ noiseStrengthDb: v ?? 30 })}
+        />
+        <span className="text-muted text-xs">Máxima</span>
+      </div>
+      <span className="text-muted text-xs">
+        Se a voz ficar metálica ou robótica ao falar alto, diminua.
+      </span>
+    </div>
   )
 }
 

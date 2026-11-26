@@ -2,15 +2,22 @@
  * AudioWorklet for the microphone, in this order:
  *   1. DeepFilterNet3 noise suppression (WASM, when enabled and loaded)
  *   2. input volume
- *   3. level meter + gate (voice activity or push-to-talk)
+ *   3. peak limiter (loud speech is turned down, not clipped)
+ *   4. level meter + gate (voice activity or push-to-talk)
  *
  * DeepFilterNet works on 10 ms frames (480 samples at 48 kHz) while the audio
  * graph renders 128-sample blocks, so frames go through small FIFOs; that adds
  * ~20 ms of latency, only while noise suppression is on.
  */
 import './worklet-shims'
-import { df_create, df_get_frame_length, df_process_frame, initSync } from './dfn3/df'
-import { Gate, rms, type GateParams } from './gate-logic'
+import {
+  df_create,
+  df_get_frame_length,
+  df_process_frame,
+  df_set_atten_lim,
+  initSync,
+} from './dfn3/df'
+import { Gate, Limiter, rms, type GateParams } from './gate-logic'
 import {
   MIC_PROCESSOR,
   type MicInMessage,
@@ -24,8 +31,6 @@ declare class AudioWorkletProcessor {
   readonly port: MessagePort
 }
 
-/** Maximum attenuation of the noise, dB (100 = remove it entirely). */
-const ATTEN_LIMIT_DB = 100
 /** Meter updates, in render blocks (~30 per second). */
 const REPORT_EVERY = Math.max(1, Math.round(sampleRate / 128 / 30))
 
@@ -44,6 +49,15 @@ class Denoiser {
   ) {
     this.frame = new Float32Array(frameLength)
     this.queue = new Float32Array(frameLength * 4)
+  }
+
+  /**
+   * Maximum attenuation of the noise, dB (100 = remove it entirely). Lower
+   * values keep a trace of the original sound, which masks the model's
+   * metallic artifacts on loud or saturated speech.
+   */
+  setAttenLimit(db: number) {
+    df_set_atten_lim(this.state, db)
   }
 
   reset() {
@@ -85,6 +99,7 @@ class MicProcessor extends AudioWorkletProcessor {
   private params: MicParams = {
     gain: 1,
     ai: false,
+    attenLimitDb: 30,
     mode: 'voice',
     thresholdDb: -50,
     autoThreshold: true,
@@ -92,6 +107,7 @@ class MicProcessor extends AudioWorkletProcessor {
   }
   private pttPressed = false
   private readonly gate = new Gate(sampleRate)
+  private readonly limiter = new Limiter(sampleRate)
   private denoiser: Denoiser | null = null
   private dfnFailed = false
   private work = new Float32Array(128)
@@ -110,9 +126,11 @@ class MicProcessor extends AudioWorkletProcessor {
   private onMessage(data: MicInMessage) {
     switch (data.type) {
       case 'params': {
-        const wasAi = this.params.ai
+        const previous = this.params
         this.params = data.params
-        if (this.params.ai !== wasAi) this.denoiser?.reset()
+        if (this.params.ai !== previous.ai) this.denoiser?.reset()
+        if (this.params.attenLimitDb !== previous.attenLimitDb)
+          this.denoiser?.setAttenLimit(this.params.attenLimitDb)
         break
       }
       case 'ptt':
@@ -122,7 +140,7 @@ class MicProcessor extends AudioWorkletProcessor {
         if (this.denoiser || this.dfnFailed) return
         try {
           initSync(data.module)
-          const state = df_create(new Uint8Array(data.model), ATTEN_LIMIT_DB)
+          const state = df_create(new Uint8Array(data.model), this.params.attenLimitDb)
           this.denoiser = new Denoiser(state, df_get_frame_length(state))
           this.post({ type: 'dfn-ready' })
         } catch (error) {
@@ -163,7 +181,11 @@ class MicProcessor extends AudioWorkletProcessor {
     const gain = this.params.gain
     if (gain !== 1) for (let i = 0; i < size; i++) signal[i] = (signal[i] ?? 0) * gain
 
-    // 3. Meter and gate (ramped across the block to avoid clicks).
+    // 3. Limiter.
+    this.limiter.process(signal)
+
+    // 4. Meter and gate (ramped across the block to avoid clicks); the clamp
+    // is only a safety net, the limiter already stays below it.
     const gateParams: GateParams = {
       mode: this.params.mode,
       thresholdDb: this.params.thresholdDb,

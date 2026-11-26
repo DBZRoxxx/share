@@ -75,6 +75,7 @@ function paramsFor(audio: AudioPrefs, test: boolean): MicParams {
   return {
     gain: audio.inputVolume,
     ai: audio.noiseSuppression === 'ai',
+    attenLimitDb: audio.noiseStrengthDb,
     // The mic test lets you hear yourself without holding the key.
     mode: usesPushToTalk(audio) ? (test ? 'open' : 'ptt') : 'voice',
     thresholdDb: audio.sensitivityDb,
