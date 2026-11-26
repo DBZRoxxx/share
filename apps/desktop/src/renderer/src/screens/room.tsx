@@ -23,7 +23,7 @@ import { TitleBar } from '@/components/title-bar'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/primitives'
 import { copyInvite } from '@/lib/invite'
-import { CAMERA_CAPTURE, cameraPublishOptions, micCaptureOptions, ROOM_OPTIONS } from '@/lib/media'
+import { CAMERA_CAPTURE, cameraPublishOptions, ROOM_OPTIONS, setMicEnabled } from '@/lib/media'
 import { setChatAuth } from '@/lib/chat-api'
 import { AudioOverlay } from '@/music/audio-overlay'
 import { takeMusicSnapshot, type MusicSnapshot } from '@/music/music-store'
@@ -249,9 +249,9 @@ export function RoomScreen({
         const withMic = resume ? resume.mic : prefs.joinWithMic
         const withCamera = resume ? resume.camera : prefs.joinWithCamera
         if (withMic) {
-          room.localParticipant
-            .setMicrophoneEnabled(true, micCaptureOptions())
-            .catch(() => toast.error('Não foi possível ligar o microfone.'))
+          setMicEnabled(room.localParticipant, true).catch(() =>
+            toast.error('Não foi possível ligar o microfone.'),
+          )
         }
         if (withCamera) {
           room.localParticipant

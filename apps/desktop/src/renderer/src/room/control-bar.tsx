@@ -21,7 +21,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/primitives'
 import { describeMediaError } from '@/lib/devices'
-import { CAMERA_CAPTURE, cameraPublishOptions, micCaptureOptions } from '@/lib/media'
+import { CAMERA_CAPTURE, cameraPublishOptions, setMicEnabled } from '@/lib/media'
 import { cn } from '@/lib/utils'
 import { usesPushToTalk } from '@/audio/mic-chain'
 import { useMic } from '@/audio/mic-state'
@@ -117,7 +117,7 @@ export function useMediaToggles() {
     if (busy) return
     setBusy('mic')
     try {
-      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled, micCaptureOptions())
+      await setMicEnabled(localParticipant, !isMicrophoneEnabled)
     } catch (error) {
       toast.error(describeMediaError(error, 'microfone'))
     } finally {

@@ -1,14 +1,17 @@
 import {
   AudioPresets,
+  LocalAudioTrack,
   ScreenSharePresets,
   VideoPreset,
   VideoPresets,
   type AudioCaptureOptions,
+  type LocalParticipant,
   type RoomOptions,
   type TrackPublishOptions,
   type VideoCaptureOptions,
 } from 'livekit-client'
-import { effectiveNoiseSuppression } from '@/audio/mic-chain'
+import { toast } from 'sonner'
+import { effectiveNoiseSuppression, micAudioContext } from '@/audio/mic-chain'
 import { MicTrackProcessor } from '@/audio/mic-processor'
 import { usePrefs, type PreferredCodec, type ScreenQuality } from '@/stores/prefs'
 
@@ -89,9 +92,29 @@ export function micConstraints(): AudioCaptureOptions {
   }
 }
 
-/** Options to turn the room microphone on: constraints plus the mic chain. */
-export function micCaptureOptions(): AudioCaptureOptions {
-  return { ...micConstraints(), processor: new MicTrackProcessor() }
+/**
+ * Turns the room microphone on or off, with the mic chain on it.
+ *
+ * The processor can't go in the capture options: livekit-client applies it
+ * while creating the track, before the track gets the room's AudioContext, and
+ * `setProcessor` refuses to run without one. So it is set once the track is
+ * published. If the chain fails, the mic still goes out, unprocessed.
+ */
+export async function setMicEnabled(participant: LocalParticipant, enabled: boolean) {
+  const publication = await participant.setMicrophoneEnabled(enabled, micConstraints())
+  const track = publication?.track
+  if (!enabled || !(track instanceof LocalAudioTrack) || track.getProcessor()) return
+  try {
+    await track.setProcessor(new MicTrackProcessor()).catch(async () => {
+      // The room had no AudioContext (it couldn't create one): lend it ours.
+      // The chain runs on its own context either way.
+      await track.setAudioContext(micAudioContext())
+      await track.setProcessor(new MicTrackProcessor())
+    })
+  } catch (error) {
+    console.error('[mic] could not start the mic chain', error)
+    toast.error('O processamento do microfone falhou; ele segue sem supressão de ruído.')
+  }
 }
 
 export const SCREEN_AUDIO_PUBLISH: TrackPublishOptions = {
