@@ -137,6 +137,10 @@ export const ROOM_OPTIONS: RoomOptions = {
   adaptiveStream: { pixelDensity: 'screen', pauseVideoInBackground: false },
   dynacast: true,
   disconnectOnPageLeave: true,
+  // Remote audio plays through the room's AudioContext, so each person's
+  // volume is a GainNode: <audio>.volume stops at 100%, people go up to 200%.
+  // The output device then has to be set on the context (switchActiveDevice).
+  webAudioMix: true,
   videoCaptureDefaults: CAMERA_CAPTURE,
   // Overrides livekit-client's own defaults, which turn every Chromium
   // processor on (voice isolation included); micConstraints() sets the rest.

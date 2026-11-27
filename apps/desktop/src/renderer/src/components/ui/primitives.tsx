@@ -1,5 +1,6 @@
 import { Check, ChevronDown, X } from 'lucide-react'
 import {
+  ContextMenu as ContextMenuPrimitive,
   Dialog as DialogPrimitive,
   DropdownMenu as MenuPrimitive,
   Popover as PopoverPrimitive,
@@ -324,6 +325,65 @@ export function MenuLabel({ className, ...props }: ComponentProps<typeof MenuPri
 
 export function MenuSeparator() {
   return <MenuPrimitive.Separator className="bg-border my-1 h-px" />
+}
+
+/* ------------------------------ Context menu ------------------------------ */
+
+export const ContextMenu = ContextMenuPrimitive.Root
+export const ContextMenuTrigger = ContextMenuPrimitive.Trigger
+
+export function ContextMenuContent({
+  className,
+  ...props
+}: ComponentProps<typeof ContextMenuPrimitive.Content>) {
+  return (
+    <ContextMenuPrimitive.Portal>
+      <ContextMenuPrimitive.Content
+        className={cn(
+          'animate-fade-in border-border bg-surface-2 z-50 min-w-56 rounded-xl border p-1 shadow-xl',
+          className,
+        )}
+        {...props}
+      />
+    </ContextMenuPrimitive.Portal>
+  )
+}
+
+export function ContextMenuCheckboxItem({
+  className,
+  children,
+  ...props
+}: ComponentProps<typeof ContextMenuPrimitive.CheckboxItem>) {
+  return (
+    <ContextMenuPrimitive.CheckboxItem
+      className={cn(
+        'data-[highlighted]:bg-surface-3 relative flex items-center rounded-lg py-2 pr-3 pl-8 text-sm outline-none select-none',
+        className,
+      )}
+      {...props}
+    >
+      <ContextMenuPrimitive.ItemIndicator className="absolute left-2.5">
+        <Check className="text-accent size-4" />
+      </ContextMenuPrimitive.ItemIndicator>
+      {children}
+    </ContextMenuPrimitive.CheckboxItem>
+  )
+}
+
+export function ContextMenuLabel({
+  className,
+  ...props
+}: ComponentProps<typeof ContextMenuPrimitive.Label>) {
+  return (
+    <ContextMenuPrimitive.Label
+      className={cn('text-muted px-3 pt-2 pb-1 text-xs font-medium', className)}
+      {...props}
+    />
+  )
+}
+
+export function ContextMenuSeparator() {
+  return <ContextMenuPrimitive.Separator className="bg-border my-1 h-px" />
 }
 
 /* ---------------------------------- Field --------------------------------- */

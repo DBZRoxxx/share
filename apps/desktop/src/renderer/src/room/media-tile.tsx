@@ -26,6 +26,7 @@ import {
 import { Slider, Tooltip } from '@/components/ui/primitives'
 import { cn, hueFor, initials } from '@/lib/utils'
 import { usePrefs } from '@/stores/prefs'
+import { ParticipantMenu } from './participant-menu'
 import { PopoutWindow } from './popout'
 import { screenAudioKey, tileKey, useRoomUi } from './room-ui'
 import { formatStats, useVideoStats } from './use-video-stats'
@@ -231,7 +232,7 @@ export function MediaTile({
     else void el.requestFullscreen()
   }
 
-  return (
+  const tile = (
     <div
       ref={tileRef}
       style={style}
@@ -341,6 +342,14 @@ export function MediaTile({
         </PopoutWindow>
       )}
     </div>
+  )
+  // Right-click on a person's camera or avatar: their volume and mute.
+  return isScreen ? (
+    tile
+  ) : (
+    <ParticipantMenu participant={participant} name={name}>
+      {tile}
+    </ParticipantMenu>
   )
 }
 

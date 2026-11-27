@@ -232,6 +232,13 @@ export function RoomScreen({
         })
         await room.connect(res.url, res.token)
         if (cancelled) return
+        // With webAudioMix, `audioOutput` above only reaches the <audio>
+        // elements; the AudioContext that actually plays needs the switch.
+        if (prefs.speakerId) {
+          room
+            .switchActiveDevice('audiooutput', prefs.speakerId)
+            .catch((error: unknown) => console.error('[room] could not set the speakers', error))
+        }
         prefs.addRecentRoom(roomId, {
           name: res.roomName,
           private: res.private,

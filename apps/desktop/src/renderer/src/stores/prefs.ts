@@ -1,6 +1,7 @@
 import type { PttBinding } from '@shared/ipc'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import { updatePeerAudio, type PeerAudio, type PeerAudioMap } from './peer-audio'
 
 export type ScreenQuality = 'motion' | 'detail'
 export type PreferredCodec = 'h264' | 'vp9' | 'vp8' | 'av1'
@@ -113,6 +114,8 @@ interface PrefsState {
   /** Music muted on this computer only (it keeps playing for everyone else). */
   musicMuted: boolean
   audio: AudioPrefs
+  /** Each person's volume and mute, for this computer only. */
+  peerAudio: PeerAudioMap
   set: (
     partial: Partial<
       Omit<
@@ -124,6 +127,7 @@ interface PrefsState {
         | 'updateRecentRoom'
         | 'setNotifications'
         | 'setAudio'
+        | 'setPeerAudio'
       >
     >,
   ) => void
@@ -135,6 +139,7 @@ interface PrefsState {
   removeRecentRoom: (id: string) => void
   setNotifications: (partial: Partial<NotificationPrefs>) => void
   setAudio: (partial: Partial<AudioPrefs>) => void
+  setPeerAudio: (identity: string, patch: Partial<PeerAudio>) => void
 }
 
 const MAX_RECENT = 40
@@ -162,8 +167,11 @@ export const usePrefs = create<PrefsState>()(
       musicVolume: 0.7,
       musicMuted: false,
       audio: DEFAULT_AUDIO,
+      peerAudio: {},
       set: (partial) => set(partial),
       setAudio: (partial) => set((s) => ({ audio: { ...s.audio, ...partial } })),
+      setPeerAudio: (identity, patch) =>
+        set((s) => ({ peerAudio: updatePeerAudio(s.peerAudio, identity, patch) })),
       setNotifications: (partial) =>
         set((s) => ({ notifications: { ...s.notifications, ...partial } })),
       addRecentRoom: (id, info = {}) =>

@@ -16,10 +16,6 @@ export function screenAudioKey(identity: string): string {
   return `${identity}:${Track.Source.ScreenShareAudio}`
 }
 
-export function micKey(identity: string): string {
-  return `${identity}:${Track.Source.Microphone}`
-}
-
 interface RoomUiState {
   layout: LayoutMode
   /** Tile shown big in spotlight mode (null = first screen share). */
@@ -28,7 +24,10 @@ interface RoomUiState {
   panel: SidePanel | null
   pickerOpen: boolean
   poppedOut: Record<string, true>
-  /** Per audio track volume, 0..1 (missing = 1). */
+  /**
+   * Shared screen audio volume per track, 0..1 (missing = 1), for this room
+   * only. People's voices are in prefs.peerAudio instead.
+   */
   volumes: Record<string, number>
   /** Last non-zero volume before muting, to restore on unmute. */
   lastVolumes: Record<string, number>

@@ -1,11 +1,12 @@
 import { useIsSpeaking, useParticipants } from '@livekit/components-react'
 import { Track, type Participant } from 'livekit-client'
-import { Camera, Link2, Mic, MicOff, MonitorUp, Volume2, VolumeX } from 'lucide-react'
+import { Camera, Link2, Mic, MicOff, MonitorUp, VolumeX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Slider, Tooltip } from '@/components/ui/primitives'
+import { Tooltip } from '@/components/ui/primitives'
 import { cn } from '@/lib/utils'
+import { usePrefs } from '@/stores/prefs'
 import { Avatar, displayName, useMicMuted } from './media-tile'
-import { micKey, useRoomUi } from './room-ui'
+import { ParticipantMenu } from './participant-menu'
 
 /** People tab of the side panel. */
 export function ParticipantsPanel({ onInvite }: { onInvite: () => void }) {
@@ -34,71 +35,57 @@ export function ParticipantsPanel({ onInvite }: { onInvite: () => void }) {
 
 function ParticipantRow({ participant }: { participant: Participant }) {
   const speaking = useIsSpeaking(participant)
-  const key = micKey(participant.identity)
-  const volume = useRoomUi((s) => s.volumes[key] ?? 1)
-  const setVolume = useRoomUi((s) => s.setVolume)
-  const toggleMute = useRoomUi((s) => s.toggleMute)
+  const silencedForMe = usePrefs((s) => !!s.peerAudio[participant.identity]?.muted)
+  const name = displayName(participant)
 
   const screen = participant.getTrackPublication(Track.Source.ScreenShare)
   const camera = participant.getTrackPublication(Track.Source.Camera)
   const micOn = !useMicMuted(participant)
 
   return (
-    <li className="group hover:bg-surface-2 rounded-xl px-2 py-2">
-      <div className="flex items-center gap-3">
-        <Avatar participant={participant} size="sm" speaking={speaking} />
-        <div className="min-w-0 flex-1">
-          <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
-            <span className="truncate">
-              {displayName(participant)}
-              {participant.isLocal && <span className="text-muted font-normal"> (você)</span>}
-            </span>
-            {!micOn && (
-              <Tooltip content="Microfone desligado">
-                <MicOff
-                  className="text-danger size-3.5 shrink-0"
-                  aria-label="Microfone desligado"
-                />
+    <ParticipantMenu participant={participant} name={name}>
+      <li className="hover:bg-surface-2 data-[state=open]:bg-surface-2 rounded-xl px-2 py-2">
+        <div className="flex items-center gap-3">
+          <Avatar participant={participant} size="sm" speaking={speaking} />
+          <div className="min-w-0 flex-1">
+            <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+              <span className="truncate">
+                {name}
+                {participant.isLocal && <span className="text-muted font-normal"> (você)</span>}
+              </span>
+              {!micOn && (
+                <Tooltip content="Microfone desligado">
+                  <MicOff
+                    className="text-danger size-3.5 shrink-0"
+                    aria-label="Microfone desligado"
+                  />
+                </Tooltip>
+              )}
+            </p>
+            {screen && <p className="text-accent text-xs">Compartilhando a tela</p>}
+          </div>
+          <div className="text-muted flex items-center gap-1.5 [&_svg]:size-4">
+            {silencedForMe && (
+              <Tooltip content="Áudio silenciado para você">
+                <VolumeX className="text-danger" aria-label="Áudio silenciado para você" />
               </Tooltip>
             )}
-          </p>
-          {screen && <p className="text-accent text-xs">Compartilhando a tela</p>}
+            {screen && (
+              <Tooltip content="Compartilhando tela">
+                <MonitorUp className="text-accent" aria-label="Compartilhando tela" />
+              </Tooltip>
+            )}
+            {camera && !camera.isMuted && (
+              <Tooltip content="Câmera ligada">
+                <Camera aria-label="Câmera ligada" />
+              </Tooltip>
+            )}
+            {micOn && (
+              <Mic className={cn(speaking && 'text-success')} aria-label="Microfone ligado" />
+            )}
+          </div>
         </div>
-        <div className="text-muted flex items-center gap-1.5 [&_svg]:size-4">
-          {screen && (
-            <Tooltip content="Compartilhando tela">
-              <MonitorUp className="text-accent" aria-label="Compartilhando tela" />
-            </Tooltip>
-          )}
-          {camera && !camera.isMuted && (
-            <Tooltip content="Câmera ligada">
-              <Camera aria-label="Câmera ligada" />
-            </Tooltip>
-          )}
-          {micOn && (
-            <Mic className={cn(speaking && 'text-success')} aria-label="Microfone ligado" />
-          )}
-        </div>
-      </div>
-      {!participant.isLocal && micOn && (
-        <div className="mt-1 hidden items-center gap-2 pl-11 group-hover:flex">
-          <button
-            type="button"
-            aria-label={volume > 0 ? 'Silenciar para mim' : 'Ativar som'}
-            onClick={() => toggleMute(key)}
-            className="text-muted hover:text-fg"
-          >
-            {volume > 0 ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-          </button>
-          <Slider
-            min={0}
-            max={1}
-            step={0.01}
-            value={[volume]}
-            onValueChange={([v]) => setVolume(key, v ?? 0)}
-          />
-        </div>
-      )}
-    </li>
+      </li>
+    </ParticipantMenu>
   )
 }
